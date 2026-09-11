@@ -1,13 +1,12 @@
 package core
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
 
 func ReadFile(path string) (string, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -19,7 +18,7 @@ func WriteFile(path string, content string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(path, []byte(content), 0644)
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
 func FileExists(path string) bool {

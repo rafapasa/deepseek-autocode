@@ -20,7 +20,7 @@ type Request struct {
 }
 
 type Orchestrator struct {
-	client *core.DeepSeekClient
+	client core.Llminterface
 }
 
 func NewOrchestrator() *Orchestrator {
@@ -99,17 +99,21 @@ Responda APENAS com JSON no formato:
 		fmt.Printf("[DeepSeek] Solicita arquivo %s\n", f.Path)
 
 		fullPath := filepath.Join(req.Raiz, f.Path)
-		content, err := core.ReadFile(fullPath)
-		if err != nil {
-			return fmt.Errorf("erro ao ler %s: %v", fullPath, err)
+		if !core.FileExists(fullPath) {
+			fmt.Printf("[AutoCode] Arquivo solicitado não encontrado: %s\n", fullPath)
+		} else {
+			content, err := core.ReadFile(fullPath)
+			if err != nil {
+				return fmt.Errorf("erro ao ler %s: %v", fullPath, err)
+			}
+
+			files = append(files, dto.FileContent{
+				Path:    f.Path,
+				Content: content,
+			})
+			fmt.Printf("[AutoCode] Arquivo %s enviado\n", f.Path)
 		}
 
-		files = append(files, dto.FileContent{
-			Path:    f.Path,
-			Content: content,
-		})
-
-		fmt.Printf("[AutoCode] Arquivo %s enviado\n", f.Path)
 	}
 
 	payload, _ := json.Marshal(files)
