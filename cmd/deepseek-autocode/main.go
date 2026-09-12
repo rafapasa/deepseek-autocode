@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 
+	"github.com/rafapasa/deepseek-autocode/internal/dto"
 	"github.com/rafapasa/deepseek-autocode/internal/service"
 )
 
@@ -15,15 +15,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	jsonFile := os.Args[1]
-
-	data, err := ioutil.ReadFile(jsonFile)
+	// arq := "/home/opc/issue.json"
+	data, err := os.ReadFile(os.Args[1])
+	// data, err := os.ReadFile(arq)
 	if err != nil {
 		fmt.Printf("❌ Erro ao ler arquivo: %v\n", err)
 		os.Exit(1)
 	}
 
-	var req service.Request
+	var req dto.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		fmt.Printf("❌ Erro ao parsear JSON: %v\n", err)
 		os.Exit(1)

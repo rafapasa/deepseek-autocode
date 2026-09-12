@@ -1,8 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func ReadFile(path string) (string, error) {
@@ -24,4 +26,13 @@ func WriteFile(path string, content string) error {
 func FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// SafeJoin junta raiz + rel, bloqueando path traversal.
+func SafeJoin(raiz, rel string) (string, error) {
+	clean := filepath.Clean(rel)
+	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
+		return "", fmt.Errorf("caminho não permitido: %s", rel)
+	}
+	return filepath.Join(raiz, clean), nil
 }
