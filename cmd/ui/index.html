@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ds-ac</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117; color: #c9d1d9; min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 14px 20px; display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; color: #e6edf3; }
+  header .status { font-size: 12px; color: #8b949e; margin-left: auto; }
+  header .status.ok { color: #3fb950; }
+  header .status.err { color: #f85149; }
+  header button.gear {
+    background:#21262d;border:1px solid #30363d;color:#c9d1d9;
+    padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;
+  }
+
+  .env-banner {
+    padding: 10px 20px; font-size: 12px; font-family: monospace;
+    border-bottom: 1px solid #30363d;
+    display: none;
+  }
+  .env-banner.err {
+    background: #3d1418; color: #ff7b72; border-bottom-color: #f85149;
+    display: block;
+  }
+  .env-banner.ok {
+    background: #0f2a17; color: #3fb950; border-bottom-color: #2ea043;
+    display: none;
+  }
+  .env-banner pre { margin: 0; white-space: pre-wrap; font-size: 11px; }
+
+  .layout { display: flex; flex: 1; min-height: 0; }
+
+  .sidebar {
+    width: 340px; background: #161b22; border-right: 1px solid #30363d;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 12px 16px; border-bottom: 1px solid #30363d;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .sidebar-header span { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sidebar-header button {
+    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;
+  }
+  .sidebar-header button:hover { background: #30363d; }
+
+  .projects { overflow-y: auto; flex: 1; }
+  .project { border-bottom: 1px solid #21262d; }
+  .project-header {
+    padding: 10px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 500; color: #e6edf3; user-select: none;
+  }
+  .project-header:hover { background: #1c2128; }
+  .project-header .arrow { font-size: 10px; color: #8b949e; transition: transform 0.15s; }
+  .project.open .arrow { transform: rotate(90deg); }
+  .project-header .count { font-size: 11px; color: #8b949e; margin-left: auto; }
+
+  .issues { display: none; padding: 4px 0; }
+  .project.open .issues { display: block; }
+  .issue {
+    padding: 8px 16px 8px 34px; font-size: 12px; color: #c9d1d9;
+    cursor: pointer; display: flex; align-items: center; gap: 8px;
+    border-left: 3px solid transparent;
+  }
+  .issue:hover { background: #1c2128; }
+  .issue.selected { background: #1f6feb22; border-left-color: #1f6feb; }
+  .issue .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .empty { padding: 20px; text-align: center; color: #8b949e; font-size: 12px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-header {
+    padding: 12px 20px; border-bottom: 1px solid #30363d;
+    display: flex; align-items: center; gap: 12px; background: #161b22;
+  }
+  .main-header .title { font-size: 13px; font-weight: 500; color: #e6edf3; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main-header button {
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    font-weight: 500; border: 1px solid #30363d;
+  }
+  .main-header button.primary { background: #238636; color: #fff; border-color: #2ea043; }
+  .main-header button.primary:hover { background: #2ea043; }
+  .main-header button.primary:disabled { background: #21262d; color: #484f58; border-color: #30363d; cursor: not-allowed; }
+  .main-header button.danger { background: #21262d; color: #f85149; }
+  .main-header button.danger:hover { background: #30363d; }
+
+  .log {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+    background: #0d1117;
+  }
+  .log .line { padding: 1px 0; }
+  .log .line.tool { color: #79c0ff; }
+  .log .line.llm { color: #d2a8ff; }
+  .log .line.err { color: #f85149; }
+  .log .line.ok { color: #3fb950; }
+  .log .line.dim { color: #8b949e; }
+
+  .modal {
+    position: fixed; inset: 0; background: #0d1117cc;
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal.open { display: flex; }
+  .modal-content {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 24px; width: 500px; max-width: 90vw;
+  }
+  .modal-content h2 { font-size: 14px; margin-bottom: 16px; color: #e6edf3; }
+  .modal-content label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; margin-top: 12px; }
+  .modal-content input {
+    width: 100%; padding: 8px 10px; background: #0d1117; border: 1px solid #30363d;
+    border-radius: 6px; color: #c9d1d9; font-size: 12px; font-family: monospace;
+  }
+  .modal-content input:focus { outline: none; border-color: #1f6feb; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .modal-actions button {
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    border: 1px solid #30363d; background: #21262d; color: #c9d1d9;
+  }
+  .modal-actions button.primary { background: #238636; color: #fff; border-color: #2ea043; }
+  .modal-actions button.primary:hover { background: #2ea043; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ds-ac</h1>
+  <span class="status" id="status">carregando...</span>
+  <button class="gear" onclick="openConfig()">⚙ config</button>
+</header>
+
+<div class="env-banner err" id="envBanner"><pre id="envBannerText"></pre></div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span>Issues</span>
+      <button onclick="loadIssues()">↻ recarregar</button>
+    </div>
+    <div class="projects" id="projects">
+      <div class="empty">carregando...</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <div class="title" id="mainTitle">Nenhuma issue selecionada</div>
+      <button class="primary" id="btnRun" disabled onclick="runIssue()">▶ Executar</button>
+      <button class="danger" id="btnStop" style="display:none" onclick="stopIssue()">■ Parar</button>
+    </div>
+    <div class="log" id="log"><div class="line dim">Selecione uma issue para começar.</div></div>
+  </main>
+</div>
+
+<div class="modal" id="configModal">
+  <div class="modal-content">
+    <h2>Configuração</h2>
+    <label>Pasta raiz das issues</label>
+    <input id="cfgIssues" placeholder="/home/opc/prj/issues">
+    <div class="modal-actions">
+      <button onclick="closeConfig()">Cancelar</button>
+      <button class="primary" onclick="saveConfig()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let cfg = { issues_dir: "" };
+let env = { base_ok: false, projeto_ok: false };
+let currentIssue = null;
+let currentProject = null;
+let evtSource = null;
+
+async function loadConfig() {
+  const r = await fetch("/api/config");
+  cfg = await r.json();
+  document.getElementById("cfgIssues").value = cfg.issues_dir || "";
+}
+
+async function loadEnv() {
+  const r = await fetch("/api/env");
+  env = await r.json();
+  renderEnv();
+  updateRunButton();
+}
+
+function renderEnv() {
+  const banner = document.getElementById("envBanner");
+  const text = document.getElementById("envBannerText");
+  if (env.base_ok && env.projeto_ok) {
+    banner.className = "env-banner ok";
+    text.textContent = "";
+    setStatus("pronto", "ok");
+    return;
+  }
+  banner.className = "env-banner err";
+  let msg = "⚠ ambiente incompleto — execução bloqueada\n\n";
+  if (!env.base_ok) msg += "✗ base.json: " + (env.base_err || "não carregado") + "\n";
+  else msg += "✓ base.json: " + env.base_path + "\n";
+  if (!env.projeto_ok) msg += "✗ projeto.json: " + (env.projeto_err || "não carregado") + "\n";
+  else msg += "✓ projeto.json: " + env.projeto_path + "\n";
+  text.textContent = msg;
+  setStatus("ambiente incompleto", "err");
+}
+
+async function saveConfig() {
+  const body = { issues_dir: document.getElementById("cfgIssues").value.trim() };
+  const r = await fetch("/api/config", { method: "POST", body: JSON.stringify(body) });
+  if (r.ok) { closeConfig(); await loadConfig(); await loadIssues(); }
+  else { alert("erro ao salvar"); }
+}
+
+function openConfig() { document.getElementById("configModal").classList.add("open"); }
+function closeConfig() { document.getElementById("configModal").classList.remove("open"); }
+
+function setStatus(text, cls) {
+  const el = document.getElementById("status");
+  el.textContent = text;
+  el.className = "status " + (cls || "");
+}
+
+async function loadIssues() {
+  const r = await fetch("/api/issues");
+  if (!r.ok) { document.getElementById("projects").innerHTML = '<div class="empty">erro ao carregar</div>'; return; }
+  const data = await r.json();
+  renderProjects(data.projects || []);
+}
+
+function renderProjects(projects) {
+  const el = document.getElementById("projects");
+  if (!projects.length) { el.innerHTML = '<div class="empty">nenhuma issue encontrada</div>'; return; }
+  el.innerHTML = projects.map(p => `
+    <div class="project" data-project="${escapeHtml(p.name)}">
+      <div class="project-header" onclick="toggleProject(this)">
+        <span class="arrow">▶</span>
+        <span>${escapeHtml(p.name)}</span>
+        <span class="count">${p.issues.length}</span>
+      </div>
+      <div class="issues">
+        ${p.issues.map(i => `
+          <div class="issue" data-project="${escapeHtml(p.name)}" data-issue="${escapeHtml(i)}" onclick="selectIssue(this)">
+            <span class="name">${escapeHtml(i)}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+function toggleProject(header) {
+  header.parentElement.classList.toggle("open");
+}
+
+function selectIssue(el) {
+  document.querySelectorAll(".issue").forEach(i => i.classList.remove("selected"));
+  el.classList.add("selected");
+  currentProject = el.dataset.project;
+  currentIssue = el.dataset.issue;
+  document.getElementById("mainTitle").textContent = currentProject + " / " + currentIssue;
+  document.getElementById("log").innerHTML = '<div class="line dim">Pronto para executar.</div>';
+  updateRunButton();
+}
+
+function updateRunButton() {
+  const btn = document.getElementById("btnRun");
+  const envOK = env.base_ok && env.projeto_ok;
+  btn.disabled = !(currentIssue && envOK);
+  if (envOK) {
+    btn.title = "";
+  } else {
+    btn.title = "ambiente incompleto — base.json e/ou projeto.json ausentes";
+  }
+}
+
+function appendLog(text, cls) {
+  const log = document.getElementById("log");
+  const line = document.createElement("div");
+  line.className = "line " + (cls || "");
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function classifyLine(line) {
+  if (line.includes("[Tool]")) return "tool";
+  if (line.includes("[DeepSeek]")) return "llm";
+  if (line.includes("❌") || line.includes("ERRO") || line.includes("erro")) return "err";
+  if (line.includes("✅") || line.includes("CONCLUÍDO")) return "ok";
+  return "";
+}
+
+async function runIssue() {
+  if (!currentIssue) return;
+  if (!env.base_ok || !env.projeto_ok) {
+    alert("ambiente incompleto. Verifique base.json e projeto.json.");
+    return;
+  }
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("btnRun").disabled = true;
+  document.getElementById("btnRun").style.display = "none";
+  document.getElementById("btnStop").style.display = "inline-block";
+  setStatus("executando...", "");
+
+  const r = await fetch("/api/run", {
+    method: "POST",
+    body: JSON.stringify({ project: currentProject, issue: currentIssue })
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    appendLog(err, "err");
+    resetButtons();
+    return;
+  }
+  const { id } = await r.json();
+
+  evtSource = new EventSource("/api/stream/" + id);
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === "line") appendLog(data.text, classifyLine(data.text));
+    else if (data.type === "done") {
+      appendLog("", "");
+      appendLog(data.success ? "✅ Concluído com sucesso" : "❌ Falhou", data.success ? "ok" : "err");
+      evtSource.close();
+      resetButtons();
+      loadIssues();
+    }
+  };
+  evtSource.onerror = () => { evtSource.close(); resetButtons(); };
+}
+
+async function stopIssue() {
+  if (!currentIssue) return;
+  await fetch("/api/stop", { method: "POST" });
+}
+
+function resetButtons() {
+  document.getElementById("btnRun").style.display = "inline-block";
+  document.getElementById("btnStop").style.display = "none";
+  updateRunButton();
+  if (env.base_ok && env.projeto_ok) setStatus("pronto", "ok");
+  else setStatus("ambiente incompleto", "err");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+(async () => {
+  await loadConfig();
+  await loadEnv();
+  await loadIssues();
+})();
+</script>
+</body>
+</html>

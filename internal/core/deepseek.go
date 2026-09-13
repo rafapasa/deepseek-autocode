@@ -35,7 +35,7 @@ func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Ch
 		Model:       "deepseek-chat",
 		Messages:    messages,
 		Temperature: 0.2,
-		MaxTokens:   8192,
+		// MaxTokens:   8192,
 	}
 	if len(tools) > 0 {
 		payload.Tools = tools

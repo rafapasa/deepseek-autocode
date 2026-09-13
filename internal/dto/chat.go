@@ -57,35 +57,3 @@ type Usage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
-
-// ===== Issue =====
-
-type Request struct {
-	Demanda   string        `json:"demanda"`
-	Estrutura []interface{} `json:"estrutura"`
-	Raiz      string        `json:"raiz"`
-	Rules     []string      `json:"rules"`
-}
-
-// ===== Planejamento =====
-
-// PlanResponse é o que a LLM responde no turno de planejamento.
-
-type Part struct {
-	ID      int      `json:"id"`
-	Demanda string   `json:"demanda"`
-	Files   []string `json:"files"`             // paths relativos à raiz
-	Summary string   `json:"summary,omitempty"` // preenchido após execução
-}
-
-type PlanResponse struct {
-	Status      string       `json:"status"`
-	Parts       []Part       `json:"parts,omitempty"`
-	Reason      string       `json:"reason,omitempty"`
-	FilesNeeded []FileNeeded `json:"files_needed,omitempty"`
-}
-
-type FileNeeded struct {
-	Path   string `json:"path"`
-	Reason string `json:"reason,omitempty"`
-}
