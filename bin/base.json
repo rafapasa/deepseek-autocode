@@ -1,0 +1,27 @@
+{
+  "rules": [
+    "Erros SEMPRE via apperror (apperror.NewNotFoundError, NewBadRequestError, NewInternalError, NewValidationError, NewForbiddenError). Nunca errors.New.",
+    "Conversoes DTO<->Model SEMPRE via gokit/mapper (mapper.MapToModel, mapper.MapToDTO). Nunca copiar campo a campo.",
+    "Respostas HTTP SEMPRE via gokit/response (response.OK, response.Paginated, response.Created, response.AppError, response.Deleted). Nunca c.JSON direto.",
+    "FindWithFilters aplica filter.ApplyFilters(query, models.X{}, filters). Slice vazio nunca e nil, sempre []models.X{}.",
+    "Repo: interface final so com GetByID, GetBy<Unique>, FindWithFilters(ctx, limit, offset int, filters map[string]interface{}), Create, Update, Delete, WithTx.",
+    "Repo Create e Update recebem DTO e devolvem *models.X.",
+    "Repo buscas recebem parametros primitivos + filters, devolvem []models.X ou *models.X.",
+    "Service mantem TODOS os metodos de negocio existentes com os MESMOS nomes. Nao renomear, nao remover.",
+    "Service adiciona/renomeia APENAS os metodos do fluxo handler->repo: List, GetBy*, Create, Update, Delete, FindByTenantPaginated.",
+    "Service GetBy* PROPAGA NotFound. Quem precisa engolir trata localmente com isNotFound.",
+    "Handler List usa response.GetPaginatedRequest(c), injeta filters[\"tenant_id\"], chama service.List.",
+    "Campos unicos por tenant SO sao unicos em conjunto com tenant_id. WHERE sempre com AND tenant_id. Nunca buscar por telefone/cpf/cnpj/email sem tenant_id.",
+    "NAO buildar. NAO rodar testes. NAO rodar go fmt. Apenas editar os arquivos listados.",
+    "NAO criar DTOs novos. Usar os que ja existem.",
+    "NAO tocar em outros models alem do especificado nesta issue."
+  ],
+  "merge": {
+    "rules": "append",
+    "arquivos": "replace",
+    "tarefas": "replace",
+    "demanda": "replace",
+    "raiz": "override",
+    "estrutura": "override"
+  }
+}

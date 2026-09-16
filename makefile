@@ -10,12 +10,12 @@ all: build
 ## build: compila o binário
 build:
 	@echo ">> build"
-	@go build -o $(BIN) .
+	@go build -o $(BIN) $(MAIN)
 	@echo "ok: $(BIN)"
 
 ## cli: roda no modo terminal. Uso: make cli ISSUE=caminho/issue.json
 cli: build
-	@if [ -z "$(ISSUE)" ]; then \
+	@if [ -z "$(ISSUE)" ]; then \ 
 		echo "uso: make cli ISSUE=/caminho/issue.json"; \
 		exit 1; \
 	fi
@@ -24,10 +24,17 @@ cli: build
 ## ui: sobe a interface web em background
 ui: build
 	@pkill -f 'deepseek-autocode --ui' >/dev/null 2>&1 || true
-	@nohup $(BIN) --ui --port $(PORT) > /tmp/dsac-ui.log 2>&1 & \
+	@sleep 0.3
+	@setsid nohup $(BIN) --ui --port $(PORT) </dev/null >/tmp/dsac-ui.log 2>&1 & \
 		sleep 1; \
-		echo ">> ds-ac ui em http://localhost:$(PORT)"; \
-		echo ">> log: tail -f /tmp/dsac-ui.log"
+		if pgrep -f 'deepseek-autocode --ui' >/dev/null; then \
+			echo ">> ds-ac ui em http://localhost:$(PORT) (pid $$(pgrep -f 'deepseek-autocode --ui'))"; \
+			echo ">> log: tail -f /tmp/dsac-ui.log"; \
+		else \
+			echo ">> falhou — veja /tmp/dsac-ui.log"; \
+			tail -n 20 /tmp/dsac-ui.log; \
+			exit 1; \
+		fi
 
 ## ui-fg: sobe a interface web em foreground (pra debug)
 ui-fg: build

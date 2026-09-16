@@ -1,0 +1,12 @@
+{
+  "raiz": "/home/opc/prj/mcp-server-openerp",
+  "estrutura": [ "<tree completo do projeto>" ],
+  "rules": [
+    "Este projeto usa gokit (github.com/etoolstec/gokit) como camada compartilhada.",
+    "Handlers usam fiber/v2. Respostas via gokit/response.",
+    "Repositorios usam GORM. Soft delete via gorm.DeletedAt.",
+    "Campos unicos por tenant no projeto: telefone, cpf, cnpj, email, inscricao_federal, whatsapp_phone_id, whatsapp_verify_token.",
+    "Todo model pertence a um tenant. Isolamento por tenant_id e obrigatorio.",
+    "Mocks sao gerados via make mocks_gen (mockgen + go.uber.org/mock)."
+  ]
+}

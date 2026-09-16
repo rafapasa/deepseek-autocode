@@ -191,11 +191,12 @@ async function loadConfig() {
 }
 
 async function loadEnv() {
-  const r = await fetch("/api/env");
+  const projeto = currentProject || "";
+  const r = await fetch("/api/env?projeto=" + encodeURIComponent(projeto));
   env = await r.json();
   renderEnv();
   updateRunButton();
-}
+} 
 
 function renderEnv() {
   const banner = document.getElementById("envBanner");
@@ -271,6 +272,7 @@ function selectIssue(el) {
   currentIssue = el.dataset.issue;
   document.getElementById("mainTitle").textContent = currentProject + " / " + currentIssue;
   document.getElementById("log").innerHTML = '<div class="line dim">Pronto para executar.</div>';
+  loadEnv();
   updateRunButton();
 }
 
