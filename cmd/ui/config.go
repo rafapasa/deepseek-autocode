@@ -7,7 +7,8 @@ import (
 )
 
 type Config struct {
-	IssuesDir string `json:"issues_dir"`
+	IssuesDir      string `json:"issues_dir"`
+	DeepSeekApiKey string `json:"deepseek_api_key,omitempty"`
 }
 
 func configPath() string {
@@ -41,4 +42,20 @@ func SaveConfig(c *Config) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// ResolveAPIKey retorna a chave em ordem de prioridade:
+//  1. flag --key (passada pelo CLI, chegou via env)
+//  2. config.json (~/.ds-ac/config.json)
+//  3. env DEEPSEEK_API_KEY
+func ResolveAPIKey() string {
+	// 1. env primeiro (a flag já foi propagada pro env pelo main.go)
+	if k := os.Getenv("DEEPSEEK_API_KEY"); k != "" {
+		return k
+	}
+	// 2. config
+	if c, err := LoadConfig(); err == nil && c.DeepSeekApiKey != "" {
+		return c.DeepSeekApiKey
+	}
+	return ""
 }

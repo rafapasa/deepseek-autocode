@@ -22,6 +22,8 @@ func Start(port string) error {
 	mux.HandleFunc("/api/config", handleConfig)
 	mux.HandleFunc("/api/env", handleEnv)
 	mux.HandleFunc("/api/issues", handleIssues)
+	mux.HandleFunc("/api/issues/create", handleCreateIssue)
+	mux.HandleFunc("/api/issues/upload", handleUploadIssue)
 	mux.HandleFunc("/api/run", handleRun)
 	mux.HandleFunc("/api/stream/", handleStream)
 	mux.HandleFunc("/api/stop", handleStop)

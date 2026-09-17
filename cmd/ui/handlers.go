@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,14 +78,35 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		json.NewEncoder(w).Encode(c)
+		// Não expõe a chave completa na resposta GET (só os últimos 4 dígitos)
+		resp := map[string]interface{}{
+			"issues_dir":       c.IssuesDir,
+			"deepseek_api_key": maskKey(c.DeepSeekApiKey),
+		}
+		json.NewEncoder(w).Encode(resp)
 	case "POST":
-		var c Config
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+		// Carrega config atual e faz merge (pra não perder a key se o form não enviar)
+		current, _ := LoadConfig()
+		if current == nil {
+			current = &Config{}
+		}
+
+		var body struct {
+			IssuesDir      string `json:"issues_dir"`
+			DeepSeekApiKey string `json:"deepseek_api_key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		if err := SaveConfig(&c); err != nil {
+
+		current.IssuesDir = body.IssuesDir
+		// Se o campo veio preenchido, atualiza. Se veio vazio, mantém o que já tinha.
+		if body.DeepSeekApiKey != "" {
+			current.DeepSeekApiKey = body.DeepSeekApiKey
+		}
+
+		if err := SaveConfig(current); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -92,6 +114,14 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", 405)
 	}
+}
+
+// maskKey mostra só os últimos 4 caracteres: "sk-...abcd"
+func maskKey(k string) string {
+	if len(k) <= 4 {
+		return ""
+	}
+	return "..." + k[len(k)-4:]
 }
 
 func handleIssues(w http.ResponseWriter, r *http.Request) {
@@ -144,13 +174,202 @@ func listIssues(dir string) []string {
 	return out
 }
 
+// ============================================================
+// CRIAÇÃO DE ISSUE (formulário)
+// ============================================================
+
+func handleCreateIssue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	var body struct {
+		Project  string   `json:"project"`
+		Filename string   `json:"filename"`
+		Demanda  string   `json:"demanda"`
+		Raiz     string   `json:"raiz,omitempty"`
+		Arquivos []string `json:"arquivos"`
+		Tarefas  []struct {
+			ID        string `json:"id"`
+			Arquivo   string `json:"arquivo"`
+			Tipo      string `json:"tipo"`
+			Descricao string `json:"descricao"`
+		} `json:"tarefas"`
+		Rules []string `json:"rules,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "JSON inválido: "+err.Error(), 400)
+		return
+	}
+
+	// Validações básicas
+	if body.Project == "" {
+		http.Error(w, "project obrigatório", 400)
+		return
+	}
+	if body.Filename == "" {
+		http.Error(w, "filename obrigatório", 400)
+		return
+	}
+	if !strings.HasSuffix(body.Filename, ".json") {
+		body.Filename += ".json"
+	}
+	if body.Demanda == "" {
+		http.Error(w, "demanda obrigatória", 400)
+		return
+	}
+	if len(body.Arquivos) == 0 {
+		http.Error(w, "pelo menos 1 arquivo é obrigatório", 400)
+		return
+	}
+	if len(body.Tarefas) == 0 {
+		http.Error(w, "pelo menos 1 tarefa é obrigatória", 400)
+		return
+	}
+
+	// Sanitiza filename (sem path traversal)
+	body.Filename = filepath.Base(body.Filename)
+	if !strings.HasSuffix(body.Filename, ".json") {
+		body.Filename += ".json"
+	}
+
+	c, err := LoadConfig()
+	if err != nil || c.IssuesDir == "" {
+		http.Error(w, "config ausente (issues_dir não configurado)", 400)
+		return
+	}
+
+	projectDir := filepath.Join(c.IssuesDir, body.Project)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		http.Error(w, "erro ao criar pasta do projeto: "+err.Error(), 500)
+		return
+	}
+
+	// Monta o JSON no formato esperado pelo merge (tarefa)
+	payload := map[string]interface{}{
+		"demanda":  body.Demanda,
+		"arquivos": body.Arquivos,
+		"tarefas":  body.Tarefas,
+	}
+	if body.Raiz != "" {
+		payload["raiz"] = body.Raiz
+	}
+	if len(body.Rules) > 0 {
+		payload["rules"] = body.Rules
+	}
+
+	// Verifica se já existe
+	targetPath := filepath.Join(projectDir, body.Filename)
+	if _, err := os.Stat(targetPath); err == nil {
+		http.Error(w, "já existe uma issue com esse nome", 409)
+		return
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		http.Error(w, "erro ao serializar: "+err.Error(), 500)
+		return
+	}
+	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+		http.Error(w, "erro ao salvar: "+err.Error(), 500)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":   true,
+		"path": targetPath,
+	})
+}
+
+// ============================================================
+// UPLOAD DE ISSUE (multipart)
+// ============================================================
+
+func handleUploadIssue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	// Limite de 10MB
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "erro ao parsear form: "+err.Error(), 400)
+		return
+	}
+
+	project := r.FormValue("project")
+	if project == "" {
+		http.Error(w, "project obrigatório", 400)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "arquivo não enviado: "+err.Error(), 400)
+		return
+	}
+	defer file.Close()
+
+	// Valida que é JSON
+	content, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "erro ao ler arquivo: "+err.Error(), 500)
+		return
+	}
+	var test map[string]interface{}
+	if err := json.Unmarshal(content, &test); err != nil {
+		http.Error(w, "arquivo não é um JSON válido: "+err.Error(), 400)
+		return
+	}
+
+	c, err := LoadConfig()
+	if err != nil || c.IssuesDir == "" {
+		http.Error(w, "config ausente (issues_dir não configurado)", 400)
+		return
+	}
+
+	projectDir := filepath.Join(c.IssuesDir, project)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		http.Error(w, "erro ao criar pasta: "+err.Error(), 500)
+		return
+	}
+
+	// Sanitiza nome do arquivo
+	filename := filepath.Base(header.Filename)
+	if !strings.HasSuffix(filename, ".json") {
+		http.Error(w, "só aceita arquivos .json", 400)
+		return
+	}
+
+	targetPath := filepath.Join(projectDir, filename)
+	if _, err := os.Stat(targetPath); err == nil {
+		http.Error(w, "já existe uma issue com esse nome", 409)
+		return
+	}
+
+	if err := os.WriteFile(targetPath, content, 0644); err != nil {
+		http.Error(w, "erro ao salvar: "+err.Error(), 500)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":   true,
+		"path": targetPath,
+		"size": len(content),
+	})
+}
+
+// ============================================================
+// EXECUÇÃO
+// ============================================================
+
 func handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
 
-	// Valida base + projeto antes de qualquer coisa
 	baseOK, projetoOK, baseErr, projetoErr := checkEnv()
 	if !baseOK || !projetoOK {
 		msg := "ambiente incompleto:\n"
@@ -168,6 +387,11 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 	if err != nil || c.IssuesDir == "" {
 		http.Error(w, "config ausente", 400)
 		return
+	}
+
+	// Garante que a API Key está no env antes de rodar
+	if os.Getenv("DEEPSEEK_API_KEY") == "" && c.DeepSeekApiKey != "" {
+		os.Setenv("DEEPSEEK_API_KEY", c.DeepSeekApiKey)
 	}
 
 	var req struct {

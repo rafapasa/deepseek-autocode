@@ -20,16 +20,33 @@ const (
 func main() {
 	uiMode := flag.Bool("ui", false, "modo interface web")
 	port := flag.String("port", "8080", "porta do servidor web (modo ui)")
-	apikey := flag.String("key", os.Getenv("DEEPSEEK_API_KEY"), "chave da api da DeepSeek (fallback: env DEEPSEEK_API_KEY)")
+	apikey := flag.String("key", "", "chave da api da DeepSeek (opcional — fallback: config.json, env)")
 	flag.Parse()
 
-	cfg := config.NewConfig(*apikey)
+	// Resolve a chave em ordem: flag > env > config.json
+	key := *apikey
+	if key == "" {
+		key = os.Getenv("DEEPSEEK_API_KEY")
+	}
+	if key == "" {
+		if c, err := ui.LoadConfig(); err == nil && c.DeepSeekApiKey != "" {
+			key = c.DeepSeekApiKey
+		}
+	}
+	if key == "" {
+		fmt.Println("❌ API Key da DeepSeek não encontrada.")
+		fmt.Println("   Defina com: --key <chave>")
+		fmt.Println("   Ou:  export DEEPSEEK_API_KEY=<chave>")
+		fmt.Println("   Ou:  configure no modal ⚙ config da UI")
+		os.Exit(1)
+	}
+
+	// Propaga pro env (subprocessos herdam)
+	os.Setenv("DEEPSEEK_API_KEY", key)
+
+	cfg := config.NewConfig(key)
 
 	if *uiMode {
-		// Propaga a chave pra env, pra subprocessos da UI herdarem via runner
-		if *apikey != "" {
-			os.Setenv("DEEPSEEK_API_KEY", *apikey)
-		}
 		if err := ui.Start(*port); err != nil {
 			fmt.Printf("❌ Erro no servidor: %v\n", err)
 			os.Exit(1)
@@ -42,16 +59,11 @@ func main() {
 		fmt.Println("Uso:")
 		fmt.Println("  deepseek-autocode <issue.json>")
 		fmt.Println("  deepseek-autocode --ui [--port 8080]")
-		fmt.Println("  (chave: env DEEPSEEK_API_KEY ou --key)")
 		os.Exit(1)
 	}
 
 	tarefaPath := args[0]
-
-	// base.json — caminho global fixo
 	basePath := envOr("DS_AC_BASE", defaultBasePath)
-
-	// projeto.json — na MESMA pasta da issue
 	projetoPath := filepath.Join(filepath.Dir(tarefaPath), "projeto.json")
 
 	base, err := loadJSON(basePath)

@@ -7,137 +7,235 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #0d1117; color: #c9d1d9; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: #f8f9fa; color: #1e293b; min-height: 100vh;
     display: flex; flex-direction: column;
   }
-  header {
-    background: #161b22; border-bottom: 1px solid #30363d;
-    padding: 14px 20px; display: flex; align-items: center; gap: 16px;
-  }
-  header h1 { font-size: 16px; font-weight: 600; color: #e6edf3; }
-  header .status { font-size: 12px; color: #8b949e; margin-left: auto; }
-  header .status.ok { color: #3fb950; }
-  header .status.err { color: #f85149; }
-  header button.gear {
-    background:#21262d;border:1px solid #30363d;color:#c9d1d9;
-    padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;
-  }
 
+  /* ---------- HEADER ---------- */
+  header {
+    background: #ffffff; border-bottom: 1px solid #e2e8f0;
+    padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  header h1 {
+    font-size: 18px; font-weight: 700; color: #1e293b;
+    letter-spacing: -0.3px;
+  }
+  header h1 span { color: #16a34a; }
+  header .status { font-size: 12px; color: #64748b; margin-left: auto; }
+  header .status.ok { color: #16a34a; font-weight: 500; }
+  header .status.err { color: #dc2626; font-weight: 500; }
+  header button.gear {
+    background: #f1f5f9; border: 1px solid #e2e8f0; color: #475569;
+    padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px;
+    font-weight: 500; transition: all 0.15s;
+  }
+  header button.gear:hover { background: #e2e8f0; }
+
+  /* ---------- ENV BANNER ---------- */
   .env-banner {
-    padding: 10px 20px; font-size: 12px; font-family: monospace;
-    border-bottom: 1px solid #30363d;
-    display: none;
+    padding: 10px 24px; font-size: 12px; font-family: monospace;
+    border-bottom: 1px solid #e2e8f0; display: none;
   }
   .env-banner.err {
-    background: #3d1418; color: #ff7b72; border-bottom-color: #f85149;
+    background: #fef2f2; color: #b91c1c; border-bottom-color: #fecaca;
     display: block;
   }
-  .env-banner.ok {
-    background: #0f2a17; color: #3fb950; border-bottom-color: #2ea043;
-    display: none;
-  }
+  .env-banner.ok { display: none; }
   .env-banner pre { margin: 0; white-space: pre-wrap; font-size: 11px; }
 
+  /* ---------- LAYOUT ---------- */
   .layout { display: flex; flex: 1; min-height: 0; }
 
+  /* ---------- SIDEBAR ---------- */
   .sidebar {
-    width: 340px; background: #161b22; border-right: 1px solid #30363d;
+    width: 260px; background: #0f172a;
     display: flex; flex-direction: column; overflow: hidden;
   }
   .sidebar-header {
-    padding: 12px 16px; border-bottom: 1px solid #30363d;
-    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px; border-bottom: 1px solid #1e293b;
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
   }
-  .sidebar-header span { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sidebar-header span {
+    font-size: 11px; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
   .sidebar-header button {
-    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
-    padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;
+    background: #1e293b; border: 1px solid #334155; color: #cbd5e1;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;
+    transition: all 0.15s;
   }
-  .sidebar-header button:hover { background: #30363d; }
+  .sidebar-header button:hover { background: #334155; }
 
-  .projects { overflow-y: auto; flex: 1; }
-  .project { border-bottom: 1px solid #21262d; }
+  .projects { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .project { margin-bottom: 2px; }
   .project-header {
     padding: 10px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px;
-    font-size: 13px; font-weight: 500; color: #e6edf3; user-select: none;
+    font-size: 13px; font-weight: 500; color: #cbd5e1; user-select: none;
+    transition: background 0.15s;
   }
-  .project-header:hover { background: #1c2128; }
-  .project-header .arrow { font-size: 10px; color: #8b949e; transition: transform 0.15s; }
+  .project-header:hover { background: #1e293b; }
+  .project-header .arrow { font-size: 9px; color: #64748b; transition: transform 0.15s; }
   .project.open .arrow { transform: rotate(90deg); }
-  .project-header .count { font-size: 11px; color: #8b949e; margin-left: auto; }
+  .project-header .count {
+    font-size: 11px; color: #94a3b8; margin-left: auto;
+    background: #1e293b; padding: 2px 8px; border-radius: 10px;
+  }
 
-  .issues { display: none; padding: 4px 0; }
+  .issues { display: none; padding: 2px 0; }
   .project.open .issues { display: block; }
   .issue {
-    padding: 8px 16px 8px 34px; font-size: 12px; color: #c9d1d9;
+    padding: 8px 16px 8px 32px; font-size: 12.5px; color: #cbd5e1;
     cursor: pointer; display: flex; align-items: center; gap: 8px;
-    border-left: 3px solid transparent;
+    border-left: 3px solid transparent; transition: all 0.15s;
   }
-  .issue:hover { background: #1c2128; }
-  .issue.selected { background: #1f6feb22; border-left-color: #1f6feb; }
+  .issue:hover { background: #1e293b; color: #f1f5f9; }
+  .issue.selected {
+    background: #1e40af; color: #ffffff; border-left-color: #3b82f6;
+    font-weight: 500;
+  }
   .issue .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .empty { padding: 20px; text-align: center; color: #8b949e; font-size: 12px; }
+  .empty { padding: 24px 16px; text-align: center; color: #64748b; font-size: 12px; }
 
-  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  /* ---------- MAIN ---------- */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f8f9fa; }
   .main-header {
-    padding: 12px 20px; border-bottom: 1px solid #30363d;
-    display: flex; align-items: center; gap: 12px; background: #161b22;
+    padding: 16px 24px; border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; gap: 12px; background: #ffffff;
   }
-  .main-header .title { font-size: 13px; font-weight: 500; color: #e6edf3; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main-header .title {
+    font-size: 14px; font-weight: 600; color: #1e293b; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .main-header button {
-    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
-    font-weight: 500; border: 1px solid #30363d;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    font-weight: 600; border: 1px solid #e2e8f0; transition: all 0.15s;
   }
-  .main-header button.primary { background: #238636; color: #fff; border-color: #2ea043; }
-  .main-header button.primary:hover { background: #2ea043; }
-  .main-header button.primary:disabled { background: #21262d; color: #484f58; border-color: #30363d; cursor: not-allowed; }
-  .main-header button.danger { background: #21262d; color: #f85149; }
-  .main-header button.danger:hover { background: #30363d; }
+  .main-header button.primary {
+    background: #16a34a; color: #ffffff; border-color: #16a34a;
+    box-shadow: 0 1px 2px rgba(22,163,74,0.2);
+  }
+  .main-header button.primary:hover { background: #15803d; }
+  .main-header button.primary:disabled {
+    background: #cbd5e1; color: #94a3b8; border-color: #cbd5e1;
+    cursor: not-allowed; box-shadow: none;
+  }
+  .main-header button.danger {
+    background: #ffffff; color: #dc2626; border-color: #fecaca;
+  }
+  .main-header button.danger:hover { background: #fef2f2; }
 
+  /* ---------- LOG ---------- */
   .log {
-    flex: 1; overflow-y: auto; padding: 16px 20px;
+    flex: 1; overflow-y: auto; padding: 20px 24px;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
-    background: #0d1117;
+    font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+    background: #ffffff; margin: 16px; border-radius: 12px;
+    border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
-  .log .line { padding: 1px 0; }
-  .log .line.tool { color: #79c0ff; }
-  .log .line.llm { color: #d2a8ff; }
-  .log .line.err { color: #f85149; }
-  .log .line.ok { color: #3fb950; }
-  .log .line.dim { color: #8b949e; }
+  .log .line { padding: 1px 0; color: #334155; }
+  .log .line.tool { color: #2563eb; }
+  .log .line.llm { color: #7c3aed; }
+  .log .line.err { color: #dc2626; }
+  .log .line.ok { color: #16a34a; }
+  .log .line.dim { color: #94a3b8; }
 
+  /* ---------- MODAL ---------- */
   .modal {
-    position: fixed; inset: 0; background: #0d1117cc;
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5);
     display: none; align-items: center; justify-content: center; z-index: 100;
+    overflow-y: auto; padding: 20px; backdrop-filter: blur(2px);
   }
   .modal.open { display: flex; }
   .modal-content {
-    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-    padding: 24px; width: 500px; max-width: 90vw;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 28px; width: 700px; max-width: 95vw;
+    max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(15, 23, 42, 0.15);
   }
-  .modal-content h2 { font-size: 14px; margin-bottom: 16px; color: #e6edf3; }
-  .modal-content label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 4px; margin-top: 12px; }
-  .modal-content input {
-    width: 100%; padding: 8px 10px; background: #0d1117; border: 1px solid #30363d;
-    border-radius: 6px; color: #c9d1d9; font-size: 12px; font-family: monospace;
+  .modal-content.wide { width: 900px; }
+  .modal-content h2 {
+    font-size: 16px; margin-bottom: 20px; color: #0f172a; font-weight: 700;
   }
-  .modal-content input:focus { outline: none; border-color: #1f6feb; }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .modal-content label {
+    display: block; font-size: 12px; color: #475569; margin-bottom: 6px;
+    margin-top: 14px; font-weight: 600;
+  }
+  .modal-content input, .modal-content textarea, .modal-content select {
+    width: 100%; padding: 10px 12px; background: #ffffff;
+    border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b;
+    font-size: 13px; font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .modal-content textarea { min-height: 110px; resize: vertical; font-family: monospace; font-size: 12px; }
+  .modal-content input:focus, .modal-content textarea:focus, .modal-content select:focus {
+    outline: none; border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+  }
+  .modal-content small { color: #64748b; font-size: 11px; display: block; margin-top: 4px; }
+
+  .modal-actions {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px;
+    padding-top: 20px; border-top: 1px solid #f1f5f9;
+  }
   .modal-actions button {
-    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
-    border: 1px solid #30363d; background: #21262d; color: #c9d1d9;
+    padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    font-weight: 600; border: 1px solid #e2e8f0;
+    background: #ffffff; color: #475569;
+    transition: all 0.15s;
   }
-  .modal-actions button.primary { background: #238636; color: #fff; border-color: #2ea043; }
-  .modal-actions button.primary:hover { background: #2ea043; }
+  .modal-actions button:hover { background: #f1f5f9; }
+  .modal-actions button.primary {
+    background: #16a34a; color: #ffffff; border-color: #16a34a;
+  }
+  .modal-actions button.primary:hover { background: #15803d; }
+  .modal-actions button:disabled {
+    opacity: 0.5; cursor: not-allowed;
+  }
+
+  /* ---------- CAMPOS DINÂMICOS ---------- */
+  .dynamic-list { margin-top: 6px; }
+  .dynamic-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: flex-start; }
+  .dynamic-row input, .dynamic-row textarea { flex: 1; }
+  .dynamic-row textarea { min-height: 60px; font-size: 12px; }
+  .dynamic-row button.remove {
+    background: #ffffff; border: 1px solid #fecaca; color: #dc2626;
+    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
+    align-self: flex-start; font-weight: 700; transition: all 0.15s;
+  }
+  .dynamic-row button.remove:hover { background: #fef2f2; }
+
+  .add-btn {
+    background: #ffffff; border: 1px dashed #cbd5e1; color: #475569;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px;
+    margin-top: 4px; font-weight: 500; transition: all 0.15s;
+  }
+  .add-btn:hover { background: #f8f9fa; border-color: #3b82f6; color: #3b82f6; }
+
+  .tarefa-row { display: grid; grid-template-columns: 70px 1.5fr 100px 2fr 40px; gap: 6px; margin-bottom: 6px; align-items: start; }
+  .tarefa-row textarea { min-height: 60px; font-size: 12px; }
+
+  /* ---------- ALERTAS ---------- */
+  .alert {
+    padding: 12px 16px; border-radius: 8px; font-size: 13px;
+    margin-top: 16px; display: none; font-weight: 500;
+  }
+  .alert.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; display: block; }
+  .alert.ok { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; display: block; }
+
+  /* ---------- SCROLLBAR ---------- */
+  .projects::-webkit-scrollbar, .log::-webkit-scrollbar, .modal-content::-webkit-scrollbar { width: 8px; }
+  .projects::-webkit-scrollbar-track, .log::-webkit-scrollbar-track, .modal-content::-webkit-scrollbar-track { background: transparent; }
+  .projects::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  .log::-webkit-scrollbar-thumb, .modal-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>ds-ac</h1>
+  <h1>ds-<span>ac</span></h1>
   <span class="status" id="status">carregando...</span>
   <button class="gear" onclick="openConfig()">⚙ config</button>
 </header>
@@ -148,7 +246,11 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <span>Issues</span>
-      <button onclick="loadIssues()">↻ recarregar</button>
+      <div style="display:flex; gap:4px;">
+        <button onclick="openCreate()">➕ nova</button>
+        <button onclick="openUpload()">📤 upload</button>
+        <button onclick="loadIssues()">↻</button>
+      </div>
     </div>
     <div class="projects" id="projects">
       <div class="empty">carregando...</div>
@@ -165,20 +267,85 @@
   </main>
 </div>
 
+<!-- ===================== MODAL: CONFIG ===================== -->
 <div class="modal" id="configModal">
   <div class="modal-content">
-    <h2>Configuração</h2>
+    <h2>⚙ Configuração</h2>
     <label>Pasta raiz das issues</label>
     <input id="cfgIssues" placeholder="/home/opc/prj/issues">
+    <label>API Key da DeepSeek</label>
+    <input id="cfgKey" type="password" placeholder="sk-... (deixe vazio para manter a atual)">
+    <small>Definida em ~/.ds-ac/config.json. Prioridade: flag --key > env DEEPSEEK_API_KEY > este campo.</small>
     <div class="modal-actions">
       <button onclick="closeConfig()">Cancelar</button>
       <button class="primary" onclick="saveConfig()">Salvar</button>
     </div>
+    <div class="alert" id="cfgAlert"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: CREATE ===================== -->
+<div class="modal" id="createModal">
+  <div class="modal-content wide">
+    <h2>➕ Nova Issue</h2>
+
+    <label>Projeto (pasta)</label>
+    <input id="crProject" placeholder="front-openerp" list="projectList">
+    <datalist id="projectList"></datalist>
+
+    <label>Nome do arquivo</label>
+    <input id="crFilename" placeholder="issue-002.json">
+    <small>Será salvo em: &lt;issues_dir&gt;/&lt;projeto&gt;/&lt;filename&gt;</small>
+
+    <label>Demanda</label>
+    <textarea id="crDemanda" placeholder="Descreva o que deve ser feito..."></textarea>
+
+    <label>Raiz do projeto (opcional)</label>
+    <input id="crRaiz" placeholder="/home/opc/prj/front-openerp">
+
+    <label>Arquivos permitidos</label>
+    <div class="dynamic-list" id="crArquivos"></div>
+    <button class="add-btn" onclick="addArquivo()">+ adicionar arquivo</button>
+
+    <label style="margin-top:16px;">Tarefas</label>
+    <div id="crTarefas"></div>
+    <button class="add-btn" onclick="addTarefa()">+ adicionar tarefa</button>
+
+    <label style="margin-top:16px;">Regras extras (opcional)</label>
+    <div class="dynamic-list" id="crRules"></div>
+    <button class="add-btn" onclick="addRule()">+ adicionar regra</button>
+
+    <div class="modal-actions">
+      <button onclick="closeCreate()">Cancelar</button>
+      <button class="primary" id="crSubmit" onclick="submitCreate()">Criar issue</button>
+    </div>
+    <div class="alert" id="crAlert"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: UPLOAD ===================== -->
+<div class="modal" id="uploadModal">
+  <div class="modal-content">
+    <h2>📤 Upload de Issue</h2>
+
+    <label>Projeto (pasta)</label>
+    <input id="upProject" placeholder="front-openerp" list="projectList">
+
+    <label>Arquivo JSON</label>
+    <input id="upFile" type="file" accept=".json,application/json">
+
+    <small>O arquivo será salvo em &lt;issues_dir&gt;/&lt;projeto&gt;/&lt;nome_do_arquivo&gt;. Não sobrescreve existentes.</small>
+
+    <div class="modal-actions">
+      <button onclick="closeUpload()">Cancelar</button>
+      <button class="primary" id="upSubmit" onclick="submitUpload()">Enviar</button>
+    </div>
+    <div class="alert" id="upAlert"></div>
   </div>
 </div>
 
 <script>
-let cfg = { issues_dir: "" };
+let cfg = { issues_dir: "", deepseek_api_key: "" };
 let env = { base_ok: false, projeto_ok: false };
 let currentIssue = null;
 let currentProject = null;
@@ -188,15 +355,39 @@ async function loadConfig() {
   const r = await fetch("/api/config");
   cfg = await r.json();
   document.getElementById("cfgIssues").value = cfg.issues_dir || "";
+  document.getElementById("cfgKey").value = "";
+  document.getElementById("cfgKey").placeholder = cfg.deepseek_api_key
+    ? "atual: " + cfg.deepseek_api_key + " (deixe vazio para manter)"
+    : "sk-...";
 }
 
+async function saveConfig() {
+  const alertEl = document.getElementById("cfgAlert");
+  alertEl.className = "alert";
+  const body = {
+    issues_dir: document.getElementById("cfgIssues").value.trim(),
+    deepseek_api_key: document.getElementById("cfgKey").value.trim()
+  };
+  const r = await fetch("/api/config", { method: "POST", body: JSON.stringify(body) });
+  if (r.ok) {
+    closeConfig();
+    await loadConfig();
+    await loadIssues();
+  } else {
+    alertEl.className = "alert err";
+    alertEl.textContent = "erro ao salvar: " + await r.text();
+  }
+}
+
+function openConfig() { document.getElementById("configModal").classList.add("open"); }
+function closeConfig() { document.getElementById("configModal").classList.remove("open"); }
+
 async function loadEnv() {
-  const projeto = currentProject || "";
-  const r = await fetch("/api/env?projeto=" + encodeURIComponent(projeto));
+  const r = await fetch("/api/env");
   env = await r.json();
   renderEnv();
   updateRunButton();
-} 
+}
 
 function renderEnv() {
   const banner = document.getElementById("envBanner");
@@ -217,16 +408,6 @@ function renderEnv() {
   setStatus("ambiente incompleto", "err");
 }
 
-async function saveConfig() {
-  const body = { issues_dir: document.getElementById("cfgIssues").value.trim() };
-  const r = await fetch("/api/config", { method: "POST", body: JSON.stringify(body) });
-  if (r.ok) { closeConfig(); await loadConfig(); await loadIssues(); }
-  else { alert("erro ao salvar"); }
-}
-
-function openConfig() { document.getElementById("configModal").classList.add("open"); }
-function closeConfig() { document.getElementById("configModal").classList.remove("open"); }
-
 function setStatus(text, cls) {
   const el = document.getElementById("status");
   el.textContent = text;
@@ -238,6 +419,12 @@ async function loadIssues() {
   if (!r.ok) { document.getElementById("projects").innerHTML = '<div class="empty">erro ao carregar</div>'; return; }
   const data = await r.json();
   renderProjects(data.projects || []);
+  updateProjectDatalist(data.projects || []);
+}
+
+function updateProjectDatalist(projects) {
+  const dl = document.getElementById("projectList");
+  dl.innerHTML = projects.map(p => `<option value="${escapeHtml(p.name)}">`).join("");
 }
 
 function renderProjects(projects) {
@@ -280,11 +467,6 @@ function updateRunButton() {
   const btn = document.getElementById("btnRun");
   const envOK = env.base_ok && env.projeto_ok;
   btn.disabled = !(currentIssue && envOK);
-  if (envOK) {
-    btn.title = "";
-  } else {
-    btn.title = "ambiente incompleto — base.json e/ou projeto.json ausentes";
-  }
 }
 
 function appendLog(text, cls) {
@@ -344,7 +526,6 @@ async function runIssue() {
 }
 
 async function stopIssue() {
-  if (!currentIssue) return;
   await fetch("/api/stop", { method: "POST" });
 }
 
@@ -354,6 +535,151 @@ function resetButtons() {
   updateRunButton();
   if (env.base_ok && env.projeto_ok) setStatus("pronto", "ok");
   else setStatus("ambiente incompleto", "err");
+}
+
+function openCreate() {
+  document.getElementById("createModal").classList.add("open");
+  ["crProject","crFilename","crDemanda","crRaiz"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("crArquivos").innerHTML = "";
+  document.getElementById("crTarefas").innerHTML = "";
+  document.getElementById("crRules").innerHTML = "";
+  document.getElementById("crAlert").className = "alert";
+  addArquivo();
+  addTarefa();
+}
+function closeCreate() { document.getElementById("createModal").classList.remove("open"); }
+
+function addArquivo() {
+  const container = document.getElementById("crArquivos");
+  const row = document.createElement("div");
+  row.className = "dynamic-row";
+  row.innerHTML = `
+    <input placeholder="lib/presentation/pages/produtos/produtos_page.dart">
+    <button class="remove" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function addRule() {
+  const container = document.getElementById("crRules");
+  const row = document.createElement("div");
+  row.className = "dynamic-row";
+  row.innerHTML = `
+    <input placeholder="Use Provider para gerenciamento de estado">
+    <button class="remove" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function addTarefa() {
+  const container = document.getElementById("crTarefas");
+  const row = document.createElement("div");
+  row.className = "dynamic-row tarefa-row";
+  row.innerHTML = `
+    <input placeholder="1" value="${container.children.length + 1}">
+    <input placeholder="lib/.../arquivo.dart">
+    <select>
+      <option value="edit">edit</option>
+      <option value="create">create</option>
+      <option value="delete">delete</option>
+    </select>
+    <textarea placeholder="Descrição da tarefa..."></textarea>
+    <button class="remove" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+async function submitCreate() {
+  const alertEl = document.getElementById("crAlert");
+  alertEl.className = "alert";
+
+  const arquivos = [...document.querySelectorAll("#crArquivos .dynamic-row input")]
+    .map(i => i.value.trim()).filter(Boolean);
+
+  const tarefas = [...document.querySelectorAll("#crTarefas .tarefa-row")].map(row => ({
+    id: row.querySelector("input:nth-of-type(1)").value.trim(),
+    arquivo: row.querySelector("input:nth-of-type(2)").value.trim(),
+    tipo: row.querySelector("select").value,
+    descricao: row.querySelector("textarea").value.trim()
+  })).filter(t => t.id && t.arquivo && t.descricao);
+
+  const rules = [...document.querySelectorAll("#crRules .dynamic-row input")]
+    .map(i => i.value.trim()).filter(Boolean);
+
+  const body = {
+    project: document.getElementById("crProject").value.trim(),
+    filename: document.getElementById("crFilename").value.trim(),
+    demanda: document.getElementById("crDemanda").value.trim(),
+    raiz: document.getElementById("crRaiz").value.trim(),
+    arquivos, tarefas, rules
+  };
+
+  if (!body.project || !body.filename || !body.demanda) {
+    alertEl.className = "alert err";
+    alertEl.textContent = "preencha project, filename e demanda";
+    return;
+  }
+  if (!arquivos.length || !tarefas.length) {
+    alertEl.className = "alert err";
+    alertEl.textContent = "pelo menos 1 arquivo e 1 tarefa";
+    return;
+  }
+
+  const r = await fetch("/api/issues/create", {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+
+  if (r.ok) {
+    alertEl.className = "alert ok";
+    alertEl.textContent = "✅ issue criada!";
+    await loadIssues();
+    setTimeout(() => { closeCreate(); }, 800);
+  } else {
+    alertEl.className = "alert err";
+    alertEl.textContent = "erro: " + await r.text();
+  }
+}
+
+function openUpload() {
+  document.getElementById("uploadModal").classList.add("open");
+  document.getElementById("upProject").value = "";
+  document.getElementById("upFile").value = "";
+  document.getElementById("upAlert").className = "alert";
+}
+function closeUpload() { document.getElementById("uploadModal").classList.remove("open"); }
+
+async function submitUpload() {
+  const alertEl = document.getElementById("upAlert");
+  alertEl.className = "alert";
+
+  const project = document.getElementById("upProject").value.trim();
+  const file = document.getElementById("upFile").files[0];
+
+  if (!project || !file) {
+    alertEl.className = "alert err";
+    alertEl.textContent = "preencha project e selecione um arquivo";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("project", project);
+  formData.append("file", file);
+
+  const r = await fetch("/api/issues/upload", {
+    method: "POST",
+    body: formData
+  });
+
+  if (r.ok) {
+    alertEl.className = "alert ok";
+    alertEl.textContent = "✅ upload concluído!";
+    await loadIssues();
+    setTimeout(() => { closeUpload(); }, 800);
+  } else {
+    alertEl.className = "alert err";
+    alertEl.textContent = "erro: " + await r.text();
+  }
 }
 
 function escapeHtml(s) {
