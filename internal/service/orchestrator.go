@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rafapasa/deepseek-autocode/internal/config"
 	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
@@ -13,8 +14,8 @@ type Orchestrator struct {
 	client core.LlmInterface
 }
 
-func NewOrchestrator() *Orchestrator {
-	return &Orchestrator{client: core.NewDeepSeekClient()}
+func NewOrchestrator(cfg *config.Config) *Orchestrator {
+	return &Orchestrator{client: core.NewDeepSeekClient(cfg.DeepSeekApiKey)}
 }
 
 func (o *Orchestrator) Start(req dto.Request) error {

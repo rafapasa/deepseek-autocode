@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
@@ -18,13 +17,12 @@ type DeepSeekClient struct {
 	http   *http.Client
 }
 
-func NewDeepSeekClient() LlmInterface {
-	key := os.Getenv("DEEPSEEK_API_KEY")
-	if key == "" {
-		panic("DEEPSEEK_API_KEY não definida")
+func NewDeepSeekClient(apiKey string) LlmInterface {
+	if apiKey == "" {
+		panic("DEEPSEEK_API_KEY não definida (use --key ou export DEEPSEEK_API_KEY)")
 	}
 	return &DeepSeekClient{
-		apiKey: key,
+		apiKey: apiKey,
 		url:    "https://api.deepseek.com/v1/chat/completions",
 		http:   &http.Client{Timeout: 300 * time.Second},
 	}

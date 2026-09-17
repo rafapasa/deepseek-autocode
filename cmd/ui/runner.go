@@ -63,7 +63,14 @@ func (r *Run) exec(ctx context.Context, issuePath string) {
 		return
 	}
 
-	cmd := exec.CommandContext(ctx, binPath, issuePath)
+	// Monta args: --key (se houver env) + issuePath
+	args := []string{}
+	if key := os.Getenv("DEEPSEEK_API_KEY"); key != "" {
+		args = append(args, "--key", key)
+	}
+	args = append(args, issuePath)
+
+	cmd := exec.CommandContext(ctx, binPath, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		r.Lines <- "❌ erro no pipe: " + err.Error()
@@ -112,7 +119,6 @@ func (r *Run) moveToConcluidas(issuePath string) {
 		return
 	}
 
-	// move o log também, se existir
 	logSrc := issuePath + ".log"
 	if _, err := os.Stat(logSrc); err == nil {
 		_ = os.Rename(logSrc, target+".log")
