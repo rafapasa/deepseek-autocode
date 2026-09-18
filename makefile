@@ -1,59 +1,126 @@
-BIN := ./bin/deepseek-autocode
-MAIN := ./cmd/deepseek-autocode/main.go
-PORT ?= 8080
+# ============================================================
+# deepseek-autocode — Makefile
+# ============================================================
 
+BIN_DIR    := bin
+BIN_NAME   := deepseek-autocode
+BIN_PATH   := $(BIN_DIR)/$(BIN_NAME)
+CMD_PATH   := ./cmd/deepseek-autocode
+SERVICE    := dsac
+PORT       := 8080
 
-.PHONY: all build cli ui kill clean help
-
-all: build
-
-## build: compila o binário
-build:
-	@echo ">> build"
-	@go build -o $(BIN) $(MAIN)
-	@echo "ok: $(BIN)"
-
-## cli: roda no modo terminal. Uso: make cli ISSUE=caminho/issue.json
-cli: build
-	@if [ -z "$(ISSUE)" ]; then \ 
-		echo "uso: make cli ISSUE=/caminho/issue.json"; \
-		exit 1; \
-	fi
-	@$(BIN) $(ISSUE)
-
-## ui: sobe a interface web em background
-ui: build
-	@pkill -f 'deepseek-autocode --ui' >/dev/null 2>&1 || true
-	@sleep 0.3
-	@setsid nohup $(BIN) --ui --port $(PORT) </dev/null >/tmp/dsac-ui.log 2>&1 & \
-		sleep 1; \
-		if pgrep -f 'deepseek-autocode --ui' >/dev/null; then \
-			echo ">> ds-ac ui em http://localhost:$(PORT) (pid $$(pgrep -f 'deepseek-autocode --ui'))"; \
-			echo ">> log: tail -f /tmp/dsac-ui.log"; \
-		else \
-			echo ">> falhou — veja /tmp/dsac-ui.log"; \
-			tail -n 20 /tmp/dsac-ui.log; \
-			exit 1; \
-		fi
-
-## ui-fg: sobe a interface web em foreground (pra debug)
-ui-fg: build
-	@$(BIN) --ui --port $(PORT)
-
-## kill: mata o processo da UI
-kill:
-	@pkill -f 'deepseek-autocode --ui' && echo ">> ui parada" || echo ">> nada rodando"
-
-## restart: reinicia a UI
-restart: kill ui
-
-## clean: remove binário e logs
-clean:
-	@rm -rf ./bin
-	@rm -f /tmp/dsac-ui.log
-	@echo ">> limpo"
-
-## help: mostra esta ajuda
+# ------------------------------------------------------------
+# Default
+# ------------------------------------------------------------
+.PHONY: help
 help:
-	@echo "alvos disponíveis:"
-	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## /  /'
+	@echo "Comandos disponíveis:"
+	@echo "  make build     — compila o binário"
+	@echo "  make restart   — mata, compila, corrige SELinux e reinicia"
+	@echo "  make stop      — para o serviço e mata processos órfãos"
+	@echo "  make start     — inicia o serviço"
+	@echo "  make status    — mostra status do serviço"
+	@echo "  make logs      — segue os logs em tempo real"
+	@echo "  make clean     — remove binário e cache"
+	@echo "  make reset     — reset-failed do systemd e reinicia"
+
+# ------------------------------------------------------------
+# Build
+# ------------------------------------------------------------
+.PHONY: build
+build:
+	@echo "🔨 Compilando $(BIN_NAME)..."
+	@go build -o $(BIN_PATH) $(CMD_PATH)
+	@echo "🔐 Corrigindo contexto SELinux..."
+	@sudo restorecon -v $(BIN_PATH) 2>/dev/null || true
+	@echo "✅ Binário pronto: $(BIN_PATH)"
+
+# ------------------------------------------------------------
+# Kill (mata processos órfãos + libera a porta)
+# ------------------------------------------------------------
+.PHONY: kill
+kill:
+	@echo "🛑 Parando serviço..."
+	@-sudo systemctl stop $(SERVICE) 2>/dev/null || true
+	@echo "🛑 Matando processos órfãos do $(BIN_NAME)..."
+	@-pkill -f "$(BIN_NAME)" 2>/dev/null || true
+	@echo "🔍 Verificando porta $(PORT)..."
+	@-sudo fuser -k $(PORT)/tcp 2>/dev/null || true
+	@-sudo ss -tlnp | grep :$(PORT) || echo "   ✅ Porta $(PORT) livre"
+	@echo "🧹 Resetando contador de falhas do systemd..."
+	@-sudo systemctl reset-failed $(SERVICE) 2>/dev/null || true
+
+# ------------------------------------------------------------
+# Stop
+# ------------------------------------------------------------
+.PHONY: stop
+stop:
+	@sudo systemctl stop $(SERVICE)
+	@-pkill -f "$(BIN_NAME)" 2>/dev/null || true
+	@-sudo fuser -k $(PORT)/tcp 2>/dev/null || true
+	@echo "✅ Parado."
+
+# ------------------------------------------------------------
+# Start
+# ------------------------------------------------------------
+.PHONY: start
+start:
+	@sudo systemctl start $(SERVICE)
+	@sleep 1
+	@sudo systemctl status $(SERVICE) --no-pager | head -12
+
+# ------------------------------------------------------------
+# Restart (kill → build → start)
+# ------------------------------------------------------------
+.PHONY: restart
+restart: kill build
+	@echo "🚀 Iniciando serviço..."
+	@sudo systemctl start $(SERVICE)
+	@sleep 1
+	@sudo systemctl status $(SERVICE) --no-pager | head -12
+	@echo ""
+	@echo "✅ Pronto. Acesse: https://dsac.etoolstec.com.br"
+	@echo "📋 Logs: make logs"
+
+# ------------------------------------------------------------
+# Reset (limpa tudo do systemd e reinicia)
+# ------------------------------------------------------------
+.PHONY: reset
+reset:
+	@sudo systemctl stop $(SERVICE) 2>/dev/null || true
+	@sudo systemctl reset-failed $(SERVICE) 2>/dev/null || true
+	@sudo systemctl start $(SERVICE)
+	@sleep 1
+	@sudo systemctl status $(SERVICE) --no-pager | head -12
+
+# ------------------------------------------------------------
+# Logs / Status
+# ------------------------------------------------------------
+.PHONY: logs
+logs:
+	@sudo journalctl -u $(SERVICE) -f
+
+.PHONY: status
+status:
+	@sudo systemctl status $(SERVICE) --no-pager
+	@echo ""
+	@echo "🔍 Porta $(PORT):"
+	@-sudo ss -tlnp | grep :$(PORT) || echo "   ❌ Nada escutando"
+
+# ------------------------------------------------------------
+# Clean
+# ------------------------------------------------------------
+.PHONY: clean
+clean:
+	@echo "🧹 Limpando..."
+	@rm -f $(BIN_PATH)
+	@go clean -cache -testcache 2>/dev/null || true
+	@echo "✅ Limpo."
+
+# ------------------------------------------------------------
+# Dev: roda sem systemd (para debug)
+# ------------------------------------------------------------
+.PHONY: dev
+dev: build
+	@echo "🚧 Rodando em foreground (Ctrl+C para sair)..."
+	@$(BIN_PATH) --ui --port $(PORT)

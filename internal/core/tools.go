@@ -154,7 +154,7 @@ func (t *ToolExecutor) readFile(args string) (string, error) {
 		return "", err
 	}
 	// Trunca em 20KB pra evitar explodir o contexto
-	const maxBytes = 20 * 1024
+	const maxBytes = 256 * 1024
 	if len(content) > maxBytes {
 		return content[:maxBytes] + fmt.Sprintf("\n\n... [truncado: %d de %d bytes]", maxBytes, len(content)), nil
 	}
