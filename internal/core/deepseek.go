@@ -30,10 +30,10 @@ func NewDeepSeekClient(apiKey string) LlmInterface {
 
 func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
 	payload := dto.ChatRequest{
-		Model:       "deepseek-chat",
+		Model:       "deepseek-flash",
 		Messages:    messages,
 		Temperature: 0.2,
-		// MaxTokens:   8192,
+		MaxTokens:   262144, // ← opcional; 393K é o teto real
 	}
 	if len(tools) > 0 {
 		payload.Tools = tools
