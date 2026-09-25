@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Propaga pro env (subprocessos herdam)
-	os.Setenv("DEEPSEEK_API_KEY", key)
+	
 
 	cfg := config.NewConfig(key)
 

@@ -14,8 +14,8 @@ type Orchestrator struct {
 	client core.LlmInterface
 }
 
-func NewOrchestrator(cfg *config.Config) *Orchestrator {
-	return &Orchestrator{client: core.NewDeepSeekClient(cfg.DeepSeekApiKey)}
+func NewOrchestrator(llm LlmInterface) *Orchestrator {
+	return &Orchestrator{client: llm}
 }
 
 func (o *Orchestrator) Start(req dto.Request) error {
