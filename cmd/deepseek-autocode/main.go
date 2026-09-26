@@ -9,6 +9,7 @@ import (
 
 	"github.com/rafapasa/deepseek-autocode/cmd/ui"
 	"github.com/rafapasa/deepseek-autocode/internal/config"
+	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 	"github.com/rafapasa/deepseek-autocode/internal/service"
 )
@@ -18,6 +19,8 @@ const (
 )
 
 func main() {
+	cfg := config.NewConfig()
+
 	uiMode := flag.Bool("ui", false, "modo interface web")
 	port := flag.String("port", "8080", "porta do servidor web (modo ui)")
 	apikey := flag.String("key", "", "chave da api da DeepSeek (opcional — fallback: config.json, env)")
@@ -26,7 +29,14 @@ func main() {
 	// Resolve a chave em ordem: flag > env > config.json
 	key := *apikey
 	if key == "" {
-		key = os.Getenv("DEEPSEEK_API_KEY")
+		switch cfg.LlmClient {
+		case config.LLM_DEEPSEEK:
+			key = cfg.DeepSeekApiKey
+		case config.LLM_META:
+			key = cfg.MetaApiKey
+		default:
+			key = cfg.DeepSeekApiKey
+		}
 	}
 	if key == "" {
 		if c, err := ui.LoadConfig(); err == nil && c.DeepSeekApiKey != "" {
@@ -42,9 +52,6 @@ func main() {
 	}
 
 	// Propaga pro env (subprocessos herdam)
-	
-
-	cfg := config.NewConfig(key)
 
 	if *uiMode {
 		if err := ui.Start(*port); err != nil {
@@ -92,7 +99,7 @@ func main() {
 	fmt.Printf("[ds-ac] arquivos: %d | tarefas: %d | rules: %d\n\n",
 		len(req.Arquivos), len(req.Tarefas), len(req.Rules))
 
-	o := service.NewOrchestrator(cfg)
+	o := service.NewOrchestrator(core.NewLlmClient(*cfg))
 	if err := o.Start(req); err != nil {
 		fmt.Printf("❌ Erro: %v\n", err)
 		os.Exit(1)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rafapasa/deepseek-autocode/internal/config"
 	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
@@ -14,7 +13,7 @@ type Orchestrator struct {
 	client core.LlmInterface
 }
 
-func NewOrchestrator(llm LlmInterface) *Orchestrator {
+func NewOrchestrator(llm core.LlmInterface) *Orchestrator {
 	return &Orchestrator{client: llm}
 }
 
