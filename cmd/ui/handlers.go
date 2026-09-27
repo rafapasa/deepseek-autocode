@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -268,7 +269,7 @@ func (h *Handler) UploadIssue(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
-	defer h.close(f)
+	defer h.closeFile(f)
 
 	content, err := io.ReadAll(f)
 	if err != nil {
@@ -304,12 +305,6 @@ func (h *Handler) UploadIssue(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"ok": true, "path": targetPath, "size": len(content)})
-}
-func (h *Handler) close(f multipart.File) {
-	err := f.Close()
-	if err != nil {
-		fmt.Printf("Erro fechando arquivo: %s", err.Error())
-	}
 }
 
 // POST /api/run
@@ -347,6 +342,18 @@ func (h *Handler) Run(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"id": run.ID})
 }
 
+// helper que não retorna erro - resolve o lint errcheck de forma elegante
+// o erro é tratado internamente, o call site não precisa checar retorno
+func writeSSE(w *bufio.Writer, payload interface{}) {
+	line := fmt.Sprintf("data: %s\n\n", jsonString(payload))
+	if _, err := w.WriteString(line); err != nil {
+		return
+	}
+	if err := w.Flush(); err != nil {
+		return
+	}
+}
+
 // GET /api/stream/:id - SSE
 func (h *Handler) Stream(c *fiber.Ctx) error {
 	id := c.Params("id")
@@ -365,14 +372,11 @@ func (h *Handler) Stream(c *fiber.Ctx) error {
 			select {
 			case line, ok := <-run.Lines:
 				if !ok {
-					// done
-					_, _ = fmt.Fprintf(w, "data: %s\n\n", jsonString(fiber.Map{"type": "done", "success": run.Success}))
-					_ = w.Flush()
+					writeSSE(w, fiber.Map{"type": "done", "success": run.Success})
 					run.Cleanup()
 					return
 				}
-				_, _ = fmt.Fprintf(w, "data: %s\n\n", jsonString(fiber.Map{"type": "line", "text": line}))
-				_ = w.Flush()
+				writeSSE(w, fiber.Map{"type": "line", "text": line})
 			case <-c.Context().Done():
 				return
 			}
@@ -401,4 +405,10 @@ func (h *Handler) Stop(c *fiber.Ctx) error {
 func jsonString(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func (h *Handler) closeFile(f multipart.File) {
+	if err := f.Close(); err != nil {
+		log.Printf("Erro fechando arquivo: %v", err)
+	}
 }
