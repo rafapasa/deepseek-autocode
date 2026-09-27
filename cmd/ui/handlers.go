@@ -1,19 +1,18 @@
 package ui
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-)
 
-const (
-	defaultBasePath    = "/home/opc/prj/issues/base.json"
-	defaultProjetoPath = "/home/opc/prj/issues/projeto.json"
+	"github.com/gofiber/fiber/v2"
+	"github.com/rafapasa/deepseek-autocode/internal/config"
 )
 
 type ProjectInfo struct {
@@ -21,24 +20,54 @@ type ProjectInfo struct {
 	Issues []string `json:"issues"`
 }
 
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
+type Handler struct {
+	cfg *config.Config
 }
 
-// checkEnv valida se base.json e projeto.json existem e são JSON válidos.
-func checkEnv() (baseOK, projetoOK bool, baseErr, projetoErr string) {
-	basePath := envOr("DS_AC_BASE", defaultBasePath)
-	projetoPath := envOr("DS_AC_PROJETO", defaultProjetoPath)
+func NewHandler(cfg *config.Config) *Handler {
+	return &Handler{cfg: cfg}
+}
 
-	baseOK, baseErr = checkJSON(basePath)
-	projetoOK, projetoErr = checkJSON(projetoPath)
+// GET /
+func (h *Handler) Index(c *fiber.Ctx) error {
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return c.Send(indexHTML)
+}
+
+// GET /api/env
+func (h *Handler) CheckEnv(c *fiber.Ctx) error {
+	baseOK, projetoOK, baseErr, projetoErr := h.checkEnv()
+	resp := fiber.Map{
+		"base_ok":      baseOK,
+		"projeto_ok":   projetoOK,
+		"base_path":    h.cfg.BaseJsonPath,
+		"projeto_path": h.cfg.ProjetoJsonPath,
+	}
+	if !baseOK {
+		resp["base_err"] = baseErr
+	}
+	if !projetoOK {
+		resp["projeto_err"] = projetoErr
+	}
+	return c.JSON(resp)
+}
+
+func (h *Handler) checkEnv() (baseOK, projetoOK bool, baseErr, projetoErr string) {
+	baseOK, baseErr = checkJSON(h.cfg.BaseJsonPath)
+	// projeto.json é opcional globalmente, mas validamos se o path estiver setado
+	if h.cfg.ProjetoJsonPath != "" {
+		projetoOK, projetoErr = checkJSON(h.cfg.ProjetoJsonPath)
+	} else {
+		// se não tem path global, consideramos OK (ele vem por projeto dentro de IssuesDir)
+		projetoOK = true
+	}
 	return
 }
 
 func checkJSON(path string) (bool, string) {
+	if path == "" {
+		return false, "path vazio"
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -53,70 +82,54 @@ func checkJSON(path string) (bool, string) {
 	return true, ""
 }
 
-func handleEnv(w http.ResponseWriter, r *http.Request) {
-	baseOK, projetoOK, baseErr, projetoErr := checkEnv()
-	resp := map[string]interface{}{
-		"base_ok":      baseOK,
-		"projeto_ok":   projetoOK,
-		"base_path":    envOr("DS_AC_BASE", defaultBasePath),
-		"projeto_path": envOr("DS_AC_PROJETO", defaultProjetoPath),
-	}
-	if !baseOK {
-		resp["base_err"] = baseErr
-	}
-	if !projetoOK {
-		resp["projeto_err"] = projetoErr
-	}
-	json.NewEncoder(w).Encode(resp)
+// GET /api/config
+func (h *Handler) GetConfig(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"issues_dir":       h.cfg.IssuesDir,
+		"deepseek_api_key": maskKey(h.cfg.DeepSeekApiKey),
+		"meta_api_key":     maskKey(h.cfg.MetaApiKey),
+		"http_port":        h.cfg.HttpPort,
+		"llm_client":       h.cfg.LlmClient,
+	})
 }
 
-func handleConfig(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		c, err := LoadConfig()
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		// Não expõe a chave completa na resposta GET (só os últimos 4 dígitos)
-		resp := map[string]interface{}{
-			"issues_dir":       c.IssuesDir,
-			"deepseek_api_key": maskKey(c.DeepSeekApiKey),
-		}
-		json.NewEncoder(w).Encode(resp)
-	case "POST":
-		// Carrega config atual e faz merge (pra não perder a key se o form não enviar)
-		current, _ := LoadConfig()
-		if current == nil {
-			current = &Config{}
-		}
-
-		var body struct {
-			IssuesDir      string `json:"issues_dir"`
-			DeepSeekApiKey string `json:"deepseek_api_key"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		current.IssuesDir = body.IssuesDir
-		// Se o campo veio preenchido, atualiza. Se veio vazio, mantém o que já tinha.
-		if body.DeepSeekApiKey != "" {
-			current.DeepSeekApiKey = body.DeepSeekApiKey
-		}
-
-		if err := SaveConfig(current); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-	default:
-		http.Error(w, "method not allowed", 405)
+// POST /api/config
+func (h *Handler) SaveConfig(c *fiber.Ctx) error {
+	var body struct {
+		IssuesDir      string `json:"issues_dir"`
+		DeepSeekApiKey string `json:"deepseek_api_key"`
+		MetaApiKey     string `json:"meta_api_key"`
+		HttpPort       int    `json:"http_port"`
+		LlmClient      int    `json:"llm_client"`
 	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+
+	if body.IssuesDir != "" {
+		h.cfg.IssuesDir = body.IssuesDir
+	}
+	if body.DeepSeekApiKey != "" {
+		h.cfg.DeepSeekApiKey = body.DeepSeekApiKey
+	}
+	if body.MetaApiKey != "" {
+		h.cfg.MetaApiKey = body.MetaApiKey
+	}
+	if body.HttpPort != 0 {
+		h.cfg.HttpPort = body.HttpPort
+	}
+	if body.LlmClient != 0 {
+		h.cfg.LlmClient = body.LlmClient
+	}
+
+	// Salva em ~/.ds-ac/config.json pra persistir a escolha da UI
+	if err := h.cfg.Save(); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
 }
 
-// maskKey mostra só os últimos 4 caracteres: "sk-...abcd"
 func maskKey(k string) string {
 	if len(k) <= 4 {
 		return ""
@@ -124,17 +137,15 @@ func maskKey(k string) string {
 	return "..." + k[len(k)-4:]
 }
 
-func handleIssues(w http.ResponseWriter, r *http.Request) {
-	c, err := LoadConfig()
-	if err != nil || c.IssuesDir == "" {
-		json.NewEncoder(w).Encode(map[string]interface{}{"projects": []ProjectInfo{}})
-		return
+// GET /api/issues
+func (h *Handler) ListIssues(c *fiber.Ctx) error {
+	if h.cfg.IssuesDir == "" {
+		return c.JSON(fiber.Map{"projects": []ProjectInfo{}})
 	}
 
-	entries, err := os.ReadDir(c.IssuesDir)
+	entries, err := os.ReadDir(h.cfg.IssuesDir)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
 
 	var projects []ProjectInfo
@@ -142,7 +153,7 @@ func handleIssues(w http.ResponseWriter, r *http.Request) {
 		if !e.IsDir() || e.Name() == "concluidas" {
 			continue
 		}
-		dir := filepath.Join(c.IssuesDir, e.Name())
+		dir := filepath.Join(h.cfg.IssuesDir, e.Name())
 		issues := listIssues(dir)
 		if len(issues) == 0 {
 			continue
@@ -152,7 +163,7 @@ func handleIssues(w http.ResponseWriter, r *http.Request) {
 
 	sort.Slice(projects, func(i, j int) bool { return projects[i].Name < projects[j].Name })
 
-	json.NewEncoder(w).Encode(map[string]interface{}{"projects": projects})
+	return c.JSON(fiber.Map{"projects": projects})
 }
 
 func listIssues(dir string) []string {
@@ -166,7 +177,7 @@ func listIssues(dir string) []string {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".json") && !strings.Contains(name, ".concluida") {
+		if strings.HasSuffix(name, ".json") && !strings.Contains(name, ".concluida") && name != "projeto.json" && name != "base.json" {
 			out = append(out, name)
 		}
 	}
@@ -174,21 +185,13 @@ func listIssues(dir string) []string {
 	return out
 }
 
-// ============================================================
-// CRIAÇÃO DE ISSUE (formulário)
-// ============================================================
-
-func handleCreateIssue(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-
+// POST /api/issues/create
+func (h *Handler) CreateIssue(c *fiber.Ctx) error {
 	var body struct {
 		Project  string   `json:"project"`
 		Filename string   `json:"filename"`
 		Demanda  string   `json:"demanda"`
-		Raiz     string   `json:"raiz,omitempty"`
+		Raiz     string   `json:"raiz"`
 		Arquivos []string `json:"arquivos"`
 		Tarefas  []struct {
 			ID        string `json:"id"`
@@ -196,252 +199,191 @@ func handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 			Tipo      string `json:"tipo"`
 			Descricao string `json:"descricao"`
 		} `json:"tarefas"`
-		Rules []string `json:"rules,omitempty"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "JSON inválido: "+err.Error(), 400)
-		return
+		Rules []string `json:"rules"`
 	}
 
-	// Validações básicas
-	if body.Project == "" {
-		http.Error(w, "project obrigatório", 400)
-		return
-	}
-	if body.Filename == "" {
-		http.Error(w, "filename obrigatório", 400)
-		return
-	}
-	if !strings.HasSuffix(body.Filename, ".json") {
-		body.Filename += ".json"
-	}
-	if body.Demanda == "" {
-		http.Error(w, "demanda obrigatória", 400)
-		return
-	}
-	if len(body.Arquivos) == 0 {
-		http.Error(w, "pelo menos 1 arquivo é obrigatório", 400)
-		return
-	}
-	if len(body.Tarefas) == 0 {
-		http.Error(w, "pelo menos 1 tarefa é obrigatória", 400)
-		return
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).SendString(err.Error())
 	}
 
-	// Sanitiza filename (sem path traversal)
-	body.Filename = filepath.Base(body.Filename)
-	if !strings.HasSuffix(body.Filename, ".json") {
-		body.Filename += ".json"
+	if body.Project == "" || body.Filename == "" || body.Demanda == "" {
+		return c.Status(400).SendString("project, filename e demanda obrigatórios")
+	}
+	if len(body.Arquivos) == 0 || len(body.Tarefas) == 0 {
+		return c.Status(400).SendString("pelo menos 1 arquivo e 1 tarefa")
 	}
 
-	c, err := LoadConfig()
-	if err != nil || c.IssuesDir == "" {
-		http.Error(w, "config ausente (issues_dir não configurado)", 400)
-		return
+	if h.cfg.IssuesDir == "" {
+		return c.Status(400).SendString("issues_dir não configurado")
 	}
 
-	projectDir := filepath.Join(c.IssuesDir, body.Project)
+	projectDir := filepath.Join(h.cfg.IssuesDir, body.Project)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		http.Error(w, "erro ao criar pasta do projeto: "+err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
 
-	// Monta o JSON no formato esperado pelo merge (tarefa)
-	payload := map[string]interface{}{
+	if !strings.HasSuffix(body.Filename, ".json") {
+		body.Filename += ".json"
+	}
+	targetPath := filepath.Join(projectDir, filepath.Base(body.Filename))
+	if _, err := os.Stat(targetPath); err == nil {
+		return c.Status(409).SendString("já existe uma issue com esse nome")
+	}
+
+	issueData := map[string]interface{}{
 		"demanda":  body.Demanda,
+		"raiz":     body.Raiz,
 		"arquivos": body.Arquivos,
 		"tarefas":  body.Tarefas,
 	}
-	if body.Raiz != "" {
-		payload["raiz"] = body.Raiz
-	}
 	if len(body.Rules) > 0 {
-		payload["rules"] = body.Rules
+		issueData["rules"] = body.Rules
 	}
 
-	// Verifica se já existe
-	targetPath := filepath.Join(projectDir, body.Filename)
-	if _, err := os.Stat(targetPath); err == nil {
-		http.Error(w, "já existe uma issue com esse nome", 409)
-		return
-	}
-
-	data, err := json.MarshalIndent(payload, "", "  ")
+	content, err := json.MarshalIndent(issueData, "", "  ")
 	if err != nil {
-		http.Error(w, "erro ao serializar: "+err.Error(), 500)
-		return
-	}
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
-		http.Error(w, "erro ao salvar: "+err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":   true,
-		"path": targetPath,
-	})
+	if err := os.WriteFile(targetPath, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
+	return c.JSON(fiber.Map{"ok": true, "path": targetPath})
 }
 
-// ============================================================
-// UPLOAD DE ISSUE (multipart)
-// ============================================================
-
-func handleUploadIssue(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-
-	// Limite de 10MB
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "erro ao parsear form: "+err.Error(), 400)
-		return
-	}
-
-	project := r.FormValue("project")
+// POST /api/issues/upload
+func (h *Handler) UploadIssue(c *fiber.Ctx) error {
+	project := c.FormValue("project")
 	if project == "" {
-		http.Error(w, "project obrigatório", 400)
-		return
+		return c.Status(400).SendString("project obrigatório")
 	}
 
-	file, header, err := r.FormFile("file")
+	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		http.Error(w, "arquivo não enviado: "+err.Error(), 400)
-		return
+		return c.Status(400).SendString("arquivo não enviado: " + err.Error())
 	}
-	defer file.Close()
 
-	// Valida que é JSON
-	content, err := io.ReadAll(file)
+	f, err := fileHeader.Open()
 	if err != nil {
-		http.Error(w, "erro ao ler arquivo: "+err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
+	defer h.close(f)
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
 	var test map[string]interface{}
 	if err := json.Unmarshal(content, &test); err != nil {
-		http.Error(w, "arquivo não é um JSON válido: "+err.Error(), 400)
-		return
+		return c.Status(400).SendString("arquivo não é um JSON válido: " + err.Error())
 	}
 
-	c, err := LoadConfig()
-	if err != nil || c.IssuesDir == "" {
-		http.Error(w, "config ausente (issues_dir não configurado)", 400)
-		return
+	if h.cfg.IssuesDir == "" {
+		return c.Status(400).SendString("issues_dir não configurado")
 	}
 
-	projectDir := filepath.Join(c.IssuesDir, project)
+	projectDir := filepath.Join(h.cfg.IssuesDir, project)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		http.Error(w, "erro ao criar pasta: "+err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
 
-	// Sanitiza nome do arquivo
-	filename := filepath.Base(header.Filename)
+	filename := filepath.Base(fileHeader.Filename)
 	if !strings.HasSuffix(filename, ".json") {
-		http.Error(w, "só aceita arquivos .json", 400)
-		return
+		return c.Status(400).SendString("só aceita arquivos .json")
 	}
 
 	targetPath := filepath.Join(projectDir, filename)
 	if _, err := os.Stat(targetPath); err == nil {
-		http.Error(w, "já existe uma issue com esse nome", 409)
-		return
+		return c.Status(409).SendString("já existe uma issue com esse nome")
 	}
 
 	if err := os.WriteFile(targetPath, content, 0644); err != nil {
-		http.Error(w, "erro ao salvar: "+err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"ok":   true,
-		"path": targetPath,
-		"size": len(content),
-	})
+	return c.JSON(fiber.Map{"ok": true, "path": targetPath, "size": len(content)})
+}
+func (h *Handler) close(f multipart.File) {
+	err := f.Close()
+	if err != nil {
+		fmt.Printf("Erro fechando arquivo: %s", err.Error())
+	}
 }
 
-// ============================================================
-// EXECUÇÃO
-// ============================================================
-
-func handleRun(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-
-	baseOK, projetoOK, baseErr, projetoErr := checkEnv()
-	if !baseOK || !projetoOK {
-		msg := "ambiente incompleto:\n"
-		if !baseOK {
-			msg += "- base: " + baseErr + "\n"
-		}
-		if !projetoOK {
+// POST /api/run
+func (h *Handler) Run(c *fiber.Ctx) error {
+	baseOK, projetoOK, baseErr, projetoErr := h.checkEnv()
+	// base.json é obrigatório, projeto.json global é opcional
+	if !baseOK {
+		msg := "ambiente incompleto:\n- base: " + baseErr + "\n"
+		if !projetoOK && h.cfg.ProjetoJsonPath != "" {
 			msg += "- projeto: " + projetoErr + "\n"
 		}
-		http.Error(w, msg, 400)
-		return
+		return c.Status(400).SendString(msg)
 	}
 
-	c, err := LoadConfig()
-	if err != nil || c.IssuesDir == "" {
-		http.Error(w, "config ausente", 400)
-		return
+	if h.cfg.IssuesDir == "" {
+		return c.Status(400).SendString("config ausente (issues_dir)")
 	}
 
-	// Garante que a API Key está no env antes de rodar
-	if os.Getenv("DEEPSEEK_API_KEY") == "" && c.DeepSeekApiKey != "" {
-		os.Setenv("DEEPSEEK_API_KEY", c.DeepSeekApiKey)
+	if h.cfg.ResolveAPIKey() == "" {
+		return c.Status(400).SendString("API Key não configurada (defina no .env DEEPSEEK_API_KEY ou META_API_KEY)")
 	}
 
 	var req struct {
 		Project string `json:"project"`
 		Issue   string `json:"issue"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), 400)
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).SendString(err.Error())
 	}
 
-	run, err := StartRun(c.IssuesDir, req.Project, req.Issue)
+	run, err := StartRun(h.cfg, req.Project, req.Issue)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return c.Status(500).SendString(err.Error())
 	}
-	json.NewEncoder(w).Encode(map[string]string{"id": run.ID})
+	return c.JSON(fiber.Map{"id": run.ID})
 }
 
-func handleStream(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/stream/")
+// GET /api/stream/:id - SSE
+func (h *Handler) Stream(c *fiber.Ctx) error {
+	id := c.Params("id")
 	run, ok := GetRun(id)
 	if !ok {
-		http.Error(w, "run não encontrado", 404)
-		return
+		return c.Status(404).SendString("run não encontrado")
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	flusher, _ := w.(http.Flusher)
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+	c.Set("Transfer-Encoding", "chunked")
 
-	for {
-		select {
-		case line, ok := <-run.Lines:
-			if !ok {
-				fmt.Fprintf(w, "data: %s\n\n", jsonString(map[string]interface{}{"type": "done", "success": run.Success}))
-				flusher.Flush()
-				run.Cleanup()
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		for {
+			select {
+			case line, ok := <-run.Lines:
+				if !ok {
+					// done
+					_, _ = fmt.Fprintf(w, "data: %s\n\n", jsonString(fiber.Map{"type": "done", "success": run.Success}))
+					_ = w.Flush()
+					run.Cleanup()
+					return
+				}
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", jsonString(fiber.Map{"type": "line", "text": line}))
+				_ = w.Flush()
+			case <-c.Context().Done():
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", jsonString(map[string]interface{}{"type": "line", "text": line}))
-			flusher.Flush()
-		case <-r.Context().Done():
-			return
 		}
-	}
+	})
+
+	return nil
 }
 
-func handleStop(w http.ResponseWriter, r *http.Request) {
+// POST /api/stop
+func (h *Handler) Stop(c *fiber.Ctx) error {
 	var latest *Run
 	runs.Range(func(k, v interface{}) bool {
 		rr := v.(*Run)
@@ -453,7 +395,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	if latest != nil {
 		latest.Stop()
 	}
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	return c.JSON(fiber.Map{"ok": true})
 }
 
 func jsonString(v interface{}) string {

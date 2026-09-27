@@ -5,12 +5,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rafapasa/deepseek-autocode/internal/config"
 )
 
 type Run struct {
@@ -21,7 +24,6 @@ type Run struct {
 	Done    chan bool
 	Success bool
 	cancel  context.CancelFunc
-	mu      sync.Mutex
 }
 
 var (
@@ -29,10 +31,14 @@ var (
 	runSeq int64
 )
 
-func StartRun(issuesDir, project, issue string) (*Run, error) {
+func StartRun(cfg *config.Config, project, issue string) (*Run, error) {
 	id := fmt.Sprintf("r%d", atomic.AddInt64(&runSeq, 1))
 
-	issuePath := filepath.Join(issuesDir, project, issue)
+	if cfg.IssuesDir == "" {
+		return nil, fmt.Errorf("issues_dir não configurado")
+	}
+
+	issuePath := filepath.Join(cfg.IssuesDir, project, issue)
 	if _, err := os.Stat(issuePath); err != nil {
 		return nil, fmt.Errorf("issue não encontrada: %s", issuePath)
 	}
@@ -48,11 +54,11 @@ func StartRun(issuesDir, project, issue string) (*Run, error) {
 	}
 	runs.Store(id, r)
 
-	go r.exec(ctx, issuePath)
+	go r.exec(ctx, cfg, issuePath)
 	return r, nil
 }
 
-func (r *Run) exec(ctx context.Context, issuePath string) {
+func (r *Run) exec(ctx context.Context, cfg *config.Config, issuePath string) {
 	defer close(r.Lines)
 	defer close(r.Done)
 
@@ -63,11 +69,13 @@ func (r *Run) exec(ctx context.Context, issuePath string) {
 		return
 	}
 
-	// Monta args: --key (se houver env) + issuePath
+	// Agora tudo vem da struct cfg, não mais de os.Getenv solto
+	// Mas ainda passamos --key pro subprocesso pra compatibilidade
 	args := []string{}
-	if key := os.Getenv("DEEPSEEK_API_KEY"); key != "" {
+	if key := cfg.ResolveAPIKey(); key != "" {
 		args = append(args, "--key", key)
 	}
+	// A porta e outras configs o binário filho vai ler do .env também
 	args = append(args, issuePath)
 
 	cmd := exec.CommandContext(ctx, binPath, args...)
@@ -79,6 +87,10 @@ func (r *Run) exec(ctx context.Context, issuePath string) {
 	}
 	cmd.Stderr = cmd.Stdout
 
+	// Garante que o filho herda o .env (DeepSeek/Meta keys)
+	// O filho vai chamar config.NewConfig() de novo e ler do .env
+	cmd.Env = os.Environ()
+
 	if err := cmd.Start(); err != nil {
 		r.Lines <- "❌ erro ao iniciar: " + err.Error()
 		r.Done <- false
@@ -87,6 +99,9 @@ func (r *Run) exec(ctx context.Context, issuePath string) {
 
 	go func() {
 		scanner := bufio.NewScanner(stdout)
+		if scanner.Err() != nil {
+			log.Printf("Erro: %s", scanner.Err().Error())
+		}
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for scanner.Scan() {
 			r.Lines <- scanner.Text()

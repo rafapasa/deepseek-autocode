@@ -1,9 +1,15 @@
 package ui
 
+// Este arquivo agora é só compatibilidade com o main.go antigo que chama ui.LoadConfig()
+// A fonte da verdade agora é internal/config/config.go que lê do .env
+// Mantemos esse arquivo pra não quebrar o `go build`, mas ele delega.
+
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/rafapasa/deepseek-autocode/internal/config"
 )
 
 type Config struct {
@@ -17,11 +23,17 @@ func configPath() string {
 }
 
 func LoadConfig() (*Config, error) {
+	// Tenta ler o ~/.ds-ac/config.json legado
 	path := configPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{}, nil
+			// Fallback: pega do .env via config.NewConfig()
+			c := config.NewConfig()
+			return &Config{
+				IssuesDir:      c.IssuesDir,
+				DeepSeekApiKey: c.DeepSeekApiKey,
+			}, nil
 		}
 		return nil, err
 	}
@@ -33,29 +45,25 @@ func LoadConfig() (*Config, error) {
 }
 
 func SaveConfig(c *Config) error {
-	path := configPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
+	// Converte pro novo config e salva usando o método novo
+	newCfg := config.NewConfig()
+	if c.IssuesDir != "" {
+		newCfg.IssuesDir = c.IssuesDir
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
+	if c.DeepSeekApiKey != "" {
+		newCfg.DeepSeekApiKey = c.DeepSeekApiKey
 	}
-	return os.WriteFile(path, data, 0644)
+	return newCfg.Save()
 }
 
-// ResolveAPIKey retorna a chave em ordem de prioridade:
-//  1. flag --key (passada pelo CLI, chegou via env)
-//  2. config.json (~/.ds-ac/config.json)
-//  3. env DEEPSEEK_API_KEY
 func ResolveAPIKey() string {
-	// 1. env primeiro (a flag já foi propagada pro env pelo main.go)
-	if k := os.Getenv("DEEPSEEK_API_KEY"); k != "" {
-		return k
+	// Ordem: .env (via internal/config) > ~/.ds-ac/config.json
+	c := config.NewConfig()
+	if key := c.ResolveAPIKey(); key != "" {
+		return key
 	}
-	// 2. config
-	if c, err := LoadConfig(); err == nil && c.DeepSeekApiKey != "" {
-		return c.DeepSeekApiKey
+	if old, err := LoadConfig(); err == nil && old.DeepSeekApiKey != "" {
+		return old.DeepSeekApiKey
 	}
 	return ""
 }

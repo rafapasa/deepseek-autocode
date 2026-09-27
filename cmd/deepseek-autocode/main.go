@@ -22,7 +22,7 @@ func main() {
 	cfg := config.NewConfig()
 
 	uiMode := flag.Bool("ui", false, "modo interface web")
-	port := flag.String("port", "8080", "porta do servidor web (modo ui)")
+	_ = flag.String("port", "8080", "porta do servidor web (modo ui)")
 	apikey := flag.String("key", "", "chave da api da DeepSeek (opcional — fallback: config.json, env)")
 	flag.Parse()
 
@@ -54,7 +54,7 @@ func main() {
 	// Propaga pro env (subprocessos herdam)
 
 	if *uiMode {
-		if err := ui.Start(*port); err != nil {
+		if err := ui.Start(cfg); err != nil {
 			fmt.Printf("❌ Erro no servidor: %v\n", err)
 			os.Exit(1)
 		}
