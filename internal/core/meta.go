@@ -19,22 +19,21 @@ type LlamaClient struct {
 
 func NewLlamaClient(apiKey string) LlmInterface {
 	if apiKey == "" {
-		panic("LLAMA_API_KEY não definida (use --key ou export LLAMA_API_KEY)")
+		panic("GROQ_API_KEY não definida. Use: export GROQ_API_KEY=gsk_...")
 	}
 	return &LlamaClient{
 		apiKey: apiKey,
-		// endpoint compatível OpenAI oficial da Meta
-		url:  "https://api.llama.com/compat/v1/chat/completions",
-		http: &http.Client{Timeout: 300 * time.Second},
+		url:    "https://api.groq.com/openai/v1/chat/completions",
+		http:   &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
 func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
 	payload := dto.ChatRequest{
-		Model:       "Llama-4-Maverick-17B-128E-Instruct-FP8", // flagship 400B MoE - 17B ativo
+		Model:       "llama-3.3-70b-versatile",
 		Messages:    messages,
 		Temperature: 0.2,
-		MaxTokens:   32768,
+		MaxTokens:   8192,
 	}
 	if len(tools) > 0 {
 		payload.Tools = tools
@@ -43,13 +42,16 @@ func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatR
 
 	body, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao chamar groq: %w", err)
 	}
 	defer resp.Body.Close()
 

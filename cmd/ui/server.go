@@ -14,19 +14,13 @@ import (
 var indexHTML []byte
 
 func Start(cfg *config.Config) error {
-	app := fiber.New(fiber.Config{
-		AppName: "ds-ac ui",
-	})
-
+	app := fiber.New(fiber.Config{AppName: "eTools-Code"})
 	app.Use(logger.New())
 	app.Use(cors.New())
-
 	h := NewHandler(cfg)
+	ch := NewChatHandler(cfg)
 
-	// UI
 	app.Get("/", h.Index)
-
-	// API
 	api := app.Group("/api")
 	api.Get("/config", h.GetConfig)
 	api.Post("/config", h.SaveConfig)
@@ -38,6 +32,13 @@ func Start(cfg *config.Config) error {
 	api.Get("/stream/:id", h.Stream)
 	api.Post("/stop", h.Stop)
 
-	fmt.Printf("[ds-ac ui] http://localhost:%d\n", cfg.HttpPort)
+	chatApi := api.Group("/chat")
+	chatApi.Post("/new", ch.CreateChat)
+	chatApi.Get("/", ch.ListChats)
+	chatApi.Get("/:id", ch.GetChat)
+	chatApi.Post("/:id/message", ch.PostMessage)
+	chatApi.Post("/:id/export", ch.ExportChat)
+
+	fmt.Printf("[eTools-Code] http://localhost:%d\n", cfg.HttpPort)
 	return app.Listen(fmt.Sprintf(":%d", cfg.HttpPort))
 }
