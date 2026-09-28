@@ -82,20 +82,35 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	llm := chat.NewChatLLM(h.cfg)
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		var full string
-		err := llm.StreamChat(llmMessages, tools,
-			func(delta string) { full += delta; writeSSEChat(w, fiber.Map{"type": "delta", "content": delta}) },
-			func(tc dto.ToolCall) {
-				if tc.Function.Name != "" {
-					result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
-					writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
+		llmMessages := llmMessages
+		for iter := 0; iter < 8; iter++ {
+			var full string
+			var toolCalls []dto.ToolCall
+			err := llm.StreamChat(llmMessages, tools,
+				func(delta string) { full += delta; writeSSEChat(w, fiber.Map{"type": "delta", "content": delta}) },
+				func(tc dto.ToolCall) { toolCalls = append(toolCalls, tc) },
+			)
+			if err != nil {
+				writeSSEChat(w, fiber.Map{"type": "error", "error": err.Error()})
+				return
+			}
+			if len(toolCalls) == 0 {
+				h.service.AddAssistantMessage(id, full)
+				writeSSEChat(w, fiber.Map{"type": "done", "content": full})
+				return
+			}
+			// executa tools e alimenta de volta
+			for _, tc := range toolCalls {
+				result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
+				writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
+				content := result.Content
+				if !result.Success {
+					content = "ERRO: " + result.Error
 				}
-			})
-		if err != nil {
-			writeSSEChat(w, fiber.Map{"type": "error", "error": err.Error()})
-		} else {
-			h.service.AddAssistantMessage(id, full)
-			writeSSEChat(w, fiber.Map{"type": "done", "content": full})
+				llmMessages = append(llmMessages, dto.Message{Role: "assistant", ToolCalls: []dto.ToolCall{tc}})
+				llmMessages = append(llmMessages, dto.Message{Role: "tool", ToolCallID: tc.ID, Content: content})
+				h.service.AddToolMessage(id, tc.ID, content)
+			}
 		}
 	})
 	return nil
@@ -119,6 +134,7 @@ func (h *ChatHandler) closeFile(f multipart.File) {
 		log.Printf("[eTools-Code] erro fechando: %v", err)
 	}
 }
+
 func writeSSEChat(w *bufio.Writer, payload interface{}) {
 	line := fmt.Sprintf("data: %s\n\n", jsonStringChat(payload))
 	w.WriteString(line)

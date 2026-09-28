@@ -70,20 +70,6 @@ func (s *Service) AddAssistantMessage(sessionID, content string) error {
 	return SaveSession(session)
 }
 
-func (s *Service) GetLLMMessages(sessionID string) ([]dto.Message, error) {
-	session, err := LoadSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	var out []dto.Message
-	for _, m := range session.Messages {
-		if m.Role == "system" || m.Role == "user" || m.Role == "assistant" {
-			out = append(out, dto.Message{Role: m.Role, Content: m.Content, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID, Name: m.Name})
-		}
-	}
-	return out, nil
-}
-
 func (s *Service) ResolveProjectRoot(project string) string {
 	if s.cfg.IssuesDir == "" {
 		return "."
@@ -127,4 +113,28 @@ func (s *Service) ExportToIssue(sessionID, demanda string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+func (s *Service) GetLLMMessages(sessionID string) ([]dto.Message, error) {
+	session, err := LoadSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var out []dto.Message
+	for _, m := range session.Messages {
+		if m.Role == "system" || m.Role == "user" || m.Role == "assistant" || m.Role == "tool" {
+			out = append(out, dto.Message{Role: m.Role, Content: m.Content, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID, Name: m.Name})
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) AddToolMessage(sessionID, toolCallID, content string) error {
+	session, err := LoadSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.Messages = append(session.Messages, dto.Message{Role: "tool", ToolCallID: toolCallID, Content: content})
+	session.UpdatedAt = time.Now()
+	return SaveSession(session)
 }

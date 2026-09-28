@@ -11,9 +11,9 @@ type LlmInterface interface {
 	ChatStream(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error
 }
 
-func BuildSystemPrompt(baseContent, projetoContent string) string {
-	return fmt.Sprintf(`Você é o eTools-Code, assistente sênior da eTools Tecnologia.
-Cores: Azul #1E3A5F e Verde #16A34A - use em qualquer UI gerada.
+func BuildSystemPrompt(baseContent, projetoContent, projectRoot string) string {
+	result := fmt.Sprintf(`Você é o eTools-Code, assistente sênior da eTools Tecnologia.
+Raiz do projeto: %s
 
 BASE.JSON:
 %s
@@ -22,10 +22,11 @@ PROJETO.JSON:
 %s
 
 REGRAS:
-1. Use list_files + read_file antes de afirmar
-2. Crie com write_file, sempre dentro do projeto
-3. Responda em pt-BR, código limpo
-`, truncate(baseContent, 8000), truncate(projetoContent, 8000))
+1. Se perguntarem caminho real de arquivo, responda direto usando a Raiz do projeto (ex: %s/cmd/deepseek-autocode/main.go) sem precisar listar.
+2. Só use list_files + read_file se realmente precisar inspecionar conteúdo.
+3. Responda em pt-BR, código limpo`, projectRoot, truncate(baseContent, 8000), truncate(projetoContent, 8000), projectRoot)
+
+	return result
 }
 
 func truncate(s string, max int) string {

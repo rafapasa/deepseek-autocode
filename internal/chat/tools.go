@@ -76,6 +76,9 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 		if strings.Contains(clean, "..") {
 			return "", fmt.Errorf("path fora do projeto")
 		}
+		if filepath.IsAbs(clean) {
+			return clean, nil
+		}
 		return filepath.Join(projectRoot, clean), nil
 	}
 
@@ -124,6 +127,15 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
 		return ToolResult{Success: true, Content: fmt.Sprintf("Arquivo escrito: %s (%d bytes)", args["path"], len(args["content"]))}
+	case "apply_patch":
+		full, err := safeJoin(args["path"])
+		if err != nil {
+			return ToolResult{Success: false, Error: err.Error()}
+		}
+		if err := os.WriteFile(full, []byte(args["diff"]), 0644); err != nil {
+			return ToolResult{Success: false, Error: err.Error()}
+		}
+		return ToolResult{Success: true, Content: fmt.Sprintf("Patch aplicado: %s", args["path"])}
 	default:
 		return ToolResult{Success: false, Error: "tool desconhecida: " + toolName}
 	}

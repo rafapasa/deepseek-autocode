@@ -20,14 +20,14 @@ func NewChatLLM(cfg *config.Config) *ChatLLM {
 	}
 }
 
-func (c *ChatLLM) BuildSystemPrompt(baseContent, projetoContent, projectRoot string) string {
-	return core.BuildSystemPrompt(baseContent, projetoContent)
-}
-
 func (c *ChatLLM) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
 	return c.client.Chat(messages, tools)
 }
 
 func (c *ChatLLM) StreamChat(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error {
 	return c.client.ChatStream(messages, tools, onDelta, onToolCall)
+}
+
+func (c *ChatLLM) BuildSystemPrompt(baseContent, projetoContent, projectRoot string) string {
+	return core.BuildSystemPrompt(baseContent, projetoContent, projectRoot)
 }
