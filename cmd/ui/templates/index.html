@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eToolsCode IA</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+
+<body>
+    <header>
+        <div class="brand">eToolsCode IA</div>
+        <select id="projectSelector" class="select-project"></select>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">
+                    ISSUES
+                    <span class="btn-group">
+                        <button class="btn-small green" id="btnNewIssue">+ nova</button>
+                        <button class="btn-small" id="btnUploadIssue">⤴ upload</button>
+                    </span>
+                </div>
+                <div id="baseCard" class="card-base">
+                    <div class="card-row">
+                        <span>✓ base.json (global)</span>
+                        <span><button class="icon-btn" data-action="editBase">✎</button><button class="icon-btn"
+                                data-action="uploadBase">⤴</button></span>
+                    </div>
+                </div>
+                <div id="projectList"></div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div class="tabs">
+                <div class="tab" id="tab-issues">📋 Issues</div>
+                <div class="tab active green" id="tab-chat">💬 Chat</div>
+            </div>
+
+            <div class="content-area">
+                <section class="chat-panel" id="issuesPanel" style="display:none">
+                    <div class="panel-head">
+                        <h3>Issues</h3>
+                        <div id="currentProjectInfo" class="muted"></div>
+                    </div>
+                    <div id="issuesList" class="scroll"></div>
+                    <div id="runLog" class="run-log"></div>
+                </section>
+
+                <section class="chat-panel" id="chatPanel">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="empty-state">Selecione projeto no combo - explorer à esquerda NÃO altera o combo
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea id="chatInput" class="chat-input" placeholder="Pergunte..." rows="1"></textarea>
+                        <button class="btn-send" id="btnSend">➤</button>
+                    </div>
+                </section>
+
+                <aside class="diff-panel" id="diffPanel">
+                    <div class="diff-head"><span>DIFF</span><span id="diffCount">● 0</span></div>
+                    <div id="diffList" class="scroll"></div>
+                </aside>
+            </div>
+        </main>
+    </div>
+
+    <!-- modals -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <h3 id="editTitle"></h3>
+            <div id="editPath" class="muted small"></div><textarea id="editContent"></textarea>
+            <div id="editAlert" class="alert"></div>
+            <div class="modal-actions"><button class="btn ghost" data-close="editModal">Cancelar</button><button
+                    class="btn primary" id="btnSaveEdit">Salvar</button></div>
+        </div>
+    </div>
+    <div class="modal" id="uploadReplaceModal">
+        <div class="modal-content sm">
+            <h3 id="uploadReplaceTitle"></h3>
+            <div id="uploadReplacePath" class="muted small"></div><input type="file" id="uploadReplaceFile"
+                accept=".json">
+            <div id="uploadReplaceAlert" class="alert"></div>
+            <div class="modal-actions"><button class="btn ghost"
+                    data-close="uploadReplaceModal">Cancelar</button><button class="btn primary"
+                    id="btnSubmitUploadReplace">Upload</button></div>
+        </div>
+    </div>
+    <div class="modal" id="createModal">
+        <div class="modal-content sm">
+            <h3>Nova issue</h3><input id="crProject" placeholder="projeto"><input id="crFilename"
+                placeholder="issue-teste.json"><textarea id="crDemanda" placeholder="demanda"></textarea>
+            <div id="crAlert" class="alert"></div>
+            <div class="modal-actions"><button class="btn ghost" data-close="createModal">Cancelar</button><button
+                    class="btn primary" id="btnSubmitCreate">Criar</button></div>
+        </div>
+    </div>
+    <div class="modal" id="uploadModal">
+        <div class="modal-content sm">
+            <h3>Upload issue</h3><input id="upProject" placeholder="projeto"><input type="file" id="upFile"
+                accept=".json">
+            <div id="upAlert" class="alert"></div>
+            <div class="modal-actions"><button class="btn ghost" data-close="uploadModal">Cancelar</button><button
+                    class="btn primary" id="btnSubmitUpload">Upload</button></div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/app.js"></script>
+</body>
+
+</html>
