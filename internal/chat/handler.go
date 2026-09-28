@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,7 +43,7 @@ func (s *Service) CreateSession(project string) (*ChatSession, error) {
 	}
 	session := NewSession(id, project, basePath, projetoPath, baseContent, projetoContent)
 	sysPrompt := s.llm.BuildSystemPrompt(baseContent, projetoContent, project)
-	session.Messages = append(session.Messages, Message{ID: uuid.New().String(), Role: RoleSystem, Content: sysPrompt, CreatedAt: time.Now()})
+	session.Messages = append(session.Messages, dto.Message{Role: "system", Content: sysPrompt})
 	if err := SaveSession(session); err != nil {
 		return nil, err
 	}
@@ -54,7 +55,7 @@ func (s *Service) AddUserMessage(sessionID, content string) (*ChatSession, error
 	if err != nil {
 		return nil, err
 	}
-	session.Messages = append(session.Messages, Message{ID: uuid.New().String(), Role: RoleUser, Content: content, CreatedAt: time.Now()})
+	session.Messages = append(session.Messages, dto.Message{Role: "user", Content: content})
 	session.UpdatedAt = time.Now()
 	return session, SaveSession(session)
 }
@@ -64,7 +65,7 @@ func (s *Service) AddAssistantMessage(sessionID, content string) error {
 	if err != nil {
 		return err
 	}
-	session.Messages = append(session.Messages, dto.Message{ID: uuid.New().String(), Role: RoleAssistant, Content: content, CreatedAt: time.Now()})
+	session.Messages = append(session.Messages, dto.Message{Role: "assistant", Content: content})
 	session.UpdatedAt = time.Now()
 	return SaveSession(session)
 }
@@ -76,9 +77,8 @@ func (s *Service) GetLLMMessages(sessionID string) ([]dto.Message, error) {
 	}
 	var out []dto.Message
 	for _, m := range session.Messages {
-		if m.Role == RoleSystem || m.Role == RoleUser || m.Role == RoleAssistant {
-			out = append(out,
-				Message{Role: m.Role, Content: m.Content})
+		if m.Role == "system" || m.Role == "user" || m.Role == "assistant" {
+			out = append(out, dto.Message{Role: m.Role, Content: m.Content, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID, Name: m.Name})
 		}
 	}
 	return out, nil
@@ -107,10 +107,12 @@ func (s *Service) ExportToIssue(sessionID, demanda string) (string, error) {
 		return "", fmt.Errorf("ISSUES_DIR vazio")
 	}
 	projectDir := filepath.Join(s.cfg.IssuesDir, session.Project)
-	os.MkdirAll(projectDir, 0755)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		log.Panicf("Erro handler.ExprtToIssue.os.MkDirAll: %v", err)
+	}
 	last := ""
 	for i := len(session.Messages) - 1; i >= 0; i-- {
-		if session.Messages[i].Role == RoleAssistant {
+		if session.Messages[i].Role == "assistant" {
 			last = session.Messages[i].Content
 			break
 		}

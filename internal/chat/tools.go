@@ -3,6 +3,7 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,10 +52,14 @@ type ToolResult struct {
 
 func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 	var args map[string]string
-	json.Unmarshal([]byte(argsJSON), &args)
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		log.Panicf("Erro tool.ExecuteTool.Unmarshal: %v", err)
+	}
 	if len(args) == 0 {
 		var generic map[string]interface{}
-		json.Unmarshal([]byte(argsJSON), &generic)
+		if err := json.Unmarshal([]byte(argsJSON), &generic); err != nil {
+			log.Panicf("Erro tool.ExecuteTool.Unmarshal: %v", err)
+		}
 		args = make(map[string]string)
 		for k, v := range generic {
 			if s, ok := v.(string); ok {
@@ -112,7 +117,9 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 		if err != nil {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
-		os.MkdirAll(filepath.Dir(full), 0755)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			log.Panicf("Err tool.ExecuteTools.os.MkdirAll: %v", err)
+		}
 		if err := os.WriteFile(full, []byte(args["content"]), 0644); err != nil {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
