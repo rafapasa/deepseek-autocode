@@ -6,45 +6,36 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
 
-type ToolDefinition struct {
-	Type     string          `json:"type"`
-	Function ToolFunctionDef `json:"function"`
-}
-
-type ToolFunctionDef struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
-}
-
-func GetTools() []ToolDefinition {
-	return []ToolDefinition{
+func GetTools() []dto.Tool {
+	return []dto.Tool{
 		{
 			Type: "function",
-			Function: ToolFunctionDef{
+			Function: dto.ToolFunction{
 				Name: "list_files", Description: "Lista arquivos de um diretório do projeto",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"dir": map[string]interface{}{"type": "string"}}, "required": []string{"dir"}},
 			},
 		},
 		{
 			Type: "function",
-			Function: ToolFunctionDef{
+			Function: dto.ToolFunction{
 				Name: "read_file", Description: "Lê conteúdo de um arquivo",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}}, "required": []string{"path"}},
 			},
 		},
 		{
 			Type: "function",
-			Function: ToolFunctionDef{
+			Function: dto.ToolFunction{
 				Name: "write_file", Description: "Cria ou sobrescreve arquivo no projeto",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "content": map[string]interface{}{"type": "string"}}, "required": []string{"path", "content"}},
 			},
 		},
 		{
 			Type: "function",
-			Function: ToolFunctionDef{
+			Function: dto.ToolFunction{
 				Name: "apply_patch", Description: "Aplica patch diff em arquivo existente",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "diff": map[string]interface{}{"type": "string"}}, "required": []string{"path", "diff"}},
 			},

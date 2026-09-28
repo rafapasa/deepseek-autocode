@@ -30,10 +30,10 @@ func NewDeepSeekClient(apiKey string) LlmInterface {
 
 func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
 	payload := dto.ChatRequest{
-		Model:       "deepseek-flash",
+		Model:       "deepseek-chat",
 		Messages:    messages,
 		Temperature: 0.2,
-		MaxTokens:   262144, // ← opcional; 393K é o teto real
+		MaxTokens:   8192,
 	}
 	if len(tools) > 0 {
 		payload.Tools = tools
@@ -41,7 +41,6 @@ func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Ch
 	}
 
 	body, _ := json.Marshal(payload)
-
 	req, _ := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -51,13 +50,10 @@ func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Ch
 		return nil, err
 	}
 	defer resp.Body.Close()
-
 	data, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("deepseek retornou %d: %s", resp.StatusCode, string(data))
 	}
-
 	var result dto.ChatResponse
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("erro ao parsear resposta: %v\n%s", err, string(data))
@@ -65,6 +61,33 @@ func (c *DeepSeekClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Ch
 	if len(result.Choices) == 0 {
 		return nil, fmt.Errorf("resposta sem choices: %s", string(data))
 	}
-
 	return &result, nil
+}
+
+func (c *DeepSeekClient) ChatStream(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error {
+	payload := dto.ChatRequest{
+		Model:       "deepseek-chat",
+		Messages:    messages,
+		Temperature: 0.2,
+		Stream:      true,
+	}
+	if len(tools) > 0 {
+		payload.Tools = tools
+		payload.ToolChoice = "auto"
+	}
+	b, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", c.url, bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		d, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("deepseek stream %d: %s", resp.StatusCode, string(d))
+	}
+	return parseStream(resp.Body, onDelta, onToolCall)
 }

@@ -39,9 +39,7 @@ func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatR
 		payload.Tools = tools
 		payload.ToolChoice = "auto"
 	}
-
 	body, _ := json.Marshal(payload)
-
 	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
@@ -54,13 +52,10 @@ func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatR
 		return nil, fmt.Errorf("erro ao chamar groq: %w", err)
 	}
 	defer resp.Body.Close()
-
 	data, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("llama retornou %d: %s", resp.StatusCode, string(data))
 	}
-
 	var result dto.ChatResponse
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("erro ao parsear resposta llama: %v\n%s", err, string(data))
@@ -68,6 +63,33 @@ func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatR
 	if len(result.Choices) == 0 {
 		return nil, fmt.Errorf("resposta llama sem choices: %s", string(data))
 	}
-
 	return &result, nil
+}
+
+func (c *LlamaClient) ChatStream(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error {
+	payload := dto.ChatRequest{
+		Model:       "llama-3.3-70b-versatile",
+		Messages:    messages,
+		Temperature: 0.2,
+		Stream:      true,
+	}
+	if len(tools) > 0 {
+		payload.Tools = tools
+		payload.ToolChoice = "auto"
+	}
+	b, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", c.url, bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		d, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("groq stream %d: %s", resp.StatusCode, string(d))
+	}
+	return parseStream(resp.Body, onDelta, onToolCall)
 }

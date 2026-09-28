@@ -1,6 +1,6 @@
 package dto
 
-// ===== Chat / Tool Calling =====
+// ===== Chat / Tool Calling - FONTE ÚNICA =====
 
 type Message struct {
 	Role       string     `json:"role"`
@@ -15,6 +15,7 @@ type ToolCall struct {
 	Type     string       `json:"type"`
 	Function FunctionCall `json:"function"`
 }
+
 
 type FunctionCall struct {
 	Name      string `json:"name"`
@@ -39,6 +40,7 @@ type ChatRequest struct {
 	ToolChoice  string    `json:"tool_choice,omitempty"`
 	Temperature float64   `json:"temperature,omitempty"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Stream      bool      `json:"stream,omitempty"`
 }
 
 type ChatResponse struct {

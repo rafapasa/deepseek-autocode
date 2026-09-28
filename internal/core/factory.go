@@ -9,6 +9,9 @@ func NewLlmClient(cfg config.Config) LlmInterface {
 	case config.LLM_META:
 		return NewLlamaClient(cfg.MetaApiKey)
 	default:
+		if cfg.MetaApiKey != "" {
+			return NewLlamaClient(cfg.MetaApiKey)
+		}
 		return NewDeepSeekClient(cfg.DeepSeekApiKey)
 	}
 }

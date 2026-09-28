@@ -2,6 +2,9 @@ package chat
 
 import (
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
 
 type Role string
@@ -13,38 +16,21 @@ const (
 	RoleTool      Role = "tool"
 )
 
-type Message struct {
-	ID         string `json:"id"`
-	Role       Role   `json:"role"`
-	Content    string `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-}
-
-type ToolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"` // function
-	Function ToolFunction `json:"function"`
-}
-
-type ToolFunction struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"` // JSON string
-}
-
+// ChatSession guarda o histórico. Usa dto.Message como base, não redefine Message/ToolCall.
 type ChatSession struct {
-	ID            string    `json:"id"`
-	Project       string    `json:"project"`
-	BasePath      string    `json:"base_path"`
-	ProjetoPath   string    `json:"projeto_path"`
-	BaseContent   string    `json:"base_content,omitempty"`
-	ProjetoContent string   `json:"projeto_content,omitempty"`
-	Messages      []Message `json:"messages"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID             string        `json:"id"`
+	Project        string        `json:"project"`
+	BasePath       string        `json:"base_path"`
+	ProjetoPath    string        `json:"projeto_path"`
+	BaseContent    string        `json:"base_content,omitempty"`
+	ProjetoContent string        `json:"projeto_content,omitempty"`
+	Messages       []dto.Message `json:"messages"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
 }
+
+// Session mantém compatibilidade com código antigo que usa chat.Session
+type Session = ChatSession
 
 func NewSession(id, project, basePath, projetoPath, baseContent, projetoContent string) *ChatSession {
 	now := time.Now()
@@ -55,9 +41,12 @@ func NewSession(id, project, basePath, projetoPath, baseContent, projetoContent 
 		ProjetoPath:    projetoPath,
 		BaseContent:    baseContent,
 		ProjetoContent: projetoContent,
-		Messages:       []Message{},
+		Messages:       []dto.Message{},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
 }
 
+func NewSessionWithID(project string) *ChatSession {
+	return NewSession(uuid.New().String(), project, "", "", "", "")
+}

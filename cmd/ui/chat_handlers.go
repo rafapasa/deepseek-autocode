@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rafapasa/deepseek-autocode/internal/chat"
 	"github.com/rafapasa/deepseek-autocode/internal/config"
+	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
 
 type ChatHandler struct {
@@ -62,7 +63,6 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	if body.Content == "" {
 		return c.Status(400).SendString("content vazio")
 	}
-
 	_, err := h.service.AddUserMessage(id, body.Content)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
@@ -71,7 +71,6 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
-
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
@@ -85,18 +84,18 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		var full string
 		err := llm.StreamChat(llmMessages, tools,
-			func(delta string) { full += delta; writeSSE(w, fiber.Map{"type": "delta", "content": delta}) },
-			func(tc chat.ToolCall) {
+			func(delta string) { full += delta; writeSSEChat(w, fiber.Map{"type": "delta", "content": delta}) },
+			func(tc dto.ToolCall) {
 				if tc.Function.Name != "" {
 					result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
-					writeSSE(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
+					writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
 				}
 			})
 		if err != nil {
-			writeSSE(w, fiber.Map{"type": "error", "error": err.Error()})
+			writeSSEChat(w, fiber.Map{"type": "error", "error": err.Error()})
 		} else {
 			h.service.AddAssistantMessage(id, full)
-			writeSSE(w, fiber.Map{"type": "done", "content": full})
+			writeSSEChat(w, fiber.Map{"type": "done", "content": full})
 		}
 	})
 	return nil
