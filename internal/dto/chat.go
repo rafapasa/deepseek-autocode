@@ -16,7 +16,6 @@ type ToolCall struct {
 	Function FunctionCall `json:"function"`
 }
 
-
 type FunctionCall struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`

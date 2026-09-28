@@ -28,9 +28,13 @@ func NewLlamaClient(apiKey string) LlmInterface {
 	}
 }
 
+func (c *LlamaClient) getModel() string {
+	return "openai/gpt-oss-120b"
+}
+
 func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
 	payload := dto.ChatRequest{
-		Model:       "llama-3.3-70b-versatile",
+		Model:       c.getModel(),
 		Messages:    messages,
 		Temperature: 0.2,
 		MaxTokens:   8192,
@@ -68,7 +72,7 @@ func (c *LlamaClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatR
 
 func (c *LlamaClient) ChatStream(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error {
 	payload := dto.ChatRequest{
-		Model:       "llama-3.3-70b-versatile",
+		Model:       c.getModel(),
 		Messages:    messages,
 		Temperature: 0.2,
 		Stream:      true,
