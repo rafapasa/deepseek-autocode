@@ -14,15 +14,25 @@ import (
 	"github.com/rafapasa/deepseek-autocode/internal/config"
 )
 
-//go:embed all:templates
-var templatesFS embed.FS
+var (
+	//go:embed all:templates
+	templatesFS embed.FS
 
-//go:embed all:static
-var staticFS embed.FS
+	//go:embed all:static
+	staticFS embed.FS
 
-var indexHTML []byte
+	indexHTML []byte
+	staticSub fs.FS
+)
 
 func init() {
+	var err error
+	// Descasca a pasta raiz "static" do FS embutido
+	staticSub, err = fs.Sub(staticFS, "static")
+	if err != nil {
+		panic("falha ao inicializar sub-filesystem estatico: " + err.Error())
+	}
+
 	data, err := fs.ReadFile(templatesFS, "templates/index.html")
 	if err != nil {
 		indexHTML = []byte("<h1>erro ao carregar template</h1>")
@@ -35,39 +45,51 @@ func Start(cfg *config.Config) error {
 	app := fiber.New(fiber.Config{AppName: "eTools-Code"})
 	app.Use(logger.New())
 	app.Use(cors.New())
+
 	h := NewHandler(cfg)
 	ch := NewChatHandler(cfg)
 
+	// Rota estática manual garantindo Content-Type correto e sem problemas de path
+	app.Get("/static/*", func(c *fiber.Ctx) error {
+		path := strings.TrimPrefix(c.Params("*"), "/")
+		data, err := fs.ReadFile(staticSub, path)
+		if err != nil {
+			return c.Status(404).SendString("static not found: " + path)
+		}
+
+		// Força os tipos MIME explicitamente
+		switch {
+		case strings.HasSuffix(path, ".css"):
+			c.Set("Content-Type", "text/css; charset=utf-8")
+		case strings.HasSuffix(path, ".js"):
+			c.Set("Content-Type", "application/javascript; charset=utf-8")
+		case strings.HasSuffix(path, ".png"):
+			c.Set("Content-Type", "image/png")
+		case strings.HasSuffix(path, ".ico"):
+			c.Set("Content-Type", "image/x-icon")
+		default:
+			if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
+				c.Set("Content-Type", ct)
+			}
+		}
+
+		c.Set("Cache-Control", "no-cache")
+		return c.Send(data)
+	})
+
 	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
-		data, err := fs.ReadFile(staticFS, "static/favicon.ico")
+		data, err := fs.ReadFile(staticSub, "favicon.ico")
 		if err == nil {
 			c.Set("Content-Type", "image/x-icon")
 			c.Set("Cache-Control", "public, max-age=86400")
 			return c.Send(data)
 		}
-		data, err = fs.ReadFile(staticFS, "static/logo.png")
+		data, err = fs.ReadFile(staticSub, "logo.png")
 		if err == nil {
 			c.Set("Content-Type", "image/png")
 			return c.Send(data)
 		}
 		return c.SendStatus(204)
-	})
-
-	app.Get("/static/*", func(c *fiber.Ctx) error {
-		path := c.Params("*")
-		data, err := fs.ReadFile(staticFS, "static/"+path)
-		if err != nil {
-			return c.Status(404).SendString("static not found: " + path)
-		}
-		if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
-			c.Set("Content-Type", ct)
-		} else if strings.HasSuffix(path, ".css") {
-			c.Set("Content-Type", "text/css; charset=utf-8")
-		} else if strings.HasSuffix(path, ".js") {
-			c.Set("Content-Type", "application/javascript; charset=utf-8")
-		}
-		c.Set("Cache-Control", "no-cache")
-		return c.Send(data)
 	})
 
 	app.Get("/", h.Index)

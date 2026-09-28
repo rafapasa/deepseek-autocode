@@ -73,6 +73,7 @@ func checkJSON(path string) (bool, string) {
 func (h *Handler) GetConfig(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"issues_dir": h.cfg.IssuesDir, "http_port": h.cfg.HttpPort, "deepseek_api_key": maskKey(h.cfg.DeepSeekApiKey), "meta_api_key": maskKey(h.cfg.MetaApiKey), "llm_client": h.cfg.LlmClient})
 }
+
 func (h *Handler) SaveConfig(c *fiber.Ctx) error {
 	var body struct {
 		IssuesDir      string `json:"issues_dir"`
@@ -104,6 +105,7 @@ func (h *Handler) SaveConfig(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"ok": true})
 }
+
 func maskKey(k string) string {
 	if len(k) <= 4 {
 		return ""
@@ -194,6 +196,7 @@ func (h *Handler) GetBase(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"content": string(data), "path": path})
 }
+
 func (h *Handler) SaveBase(c *fiber.Ctx) error {
 	var body struct {
 		Content string `json:"content"`
@@ -209,21 +212,38 @@ func (h *Handler) SaveBase(c *fiber.Ctx) error {
 	if path == "" {
 		path = filepath.Join(h.cfg.IssuesDir, "base.json")
 	}
-	os.WriteFile(path, []byte(body.Content), 0644)
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) UploadBase(c *fiber.Ctx) error {
-	fh, _ := c.FormFile("file")
-	f, _ := fh.Open()
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	defer h.closeFile(f)
-	content, _ := io.ReadAll(f)
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
 	path := h.cfg.BaseJsonPath
 	if path == "" {
 		path = filepath.Join(h.cfg.IssuesDir, "base.json")
 	}
-	os.WriteFile(path, content, 0644)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) GetProjeto(c *fiber.Ctx) error {
 	project := c.Params("project")
 	path := filepath.Join(h.cfg.IssuesDir, project, "projeto.json")
@@ -233,6 +253,7 @@ func (h *Handler) GetProjeto(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"content": string(data), "path": path})
 }
+
 func (h *Handler) SaveProjeto(c *fiber.Ctx) error {
 	project := c.Params("project")
 	var body struct {
@@ -242,21 +263,42 @@ func (h *Handler) SaveProjeto(c *fiber.Ctx) error {
 		return c.Status(400).SendString(err.Error())
 	}
 	path := filepath.Join(h.cfg.IssuesDir, project, "projeto.json")
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, []byte(body.Content), 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) UploadProjeto(c *fiber.Ctx) error {
 	project := c.Params("project")
-	fh, _ := c.FormFile("file")
-	f, _ := fh.Open()
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	defer h.closeFile(f)
-	content, _ := io.ReadAll(f)
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
 	path := filepath.Join(h.cfg.IssuesDir, project, "projeto.json")
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, content, 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) GetIssueFile(c *fiber.Ctx) error {
 	project := c.Params("project")
 	file := c.Params("*")
@@ -273,6 +315,7 @@ func (h *Handler) GetIssueFile(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"content": string(data), "path": path})
 }
+
 func (h *Handler) SaveIssueFile(c *fiber.Ctx) error {
 	project := c.Params("project")
 	file := c.Params("*")
@@ -289,10 +332,15 @@ func (h *Handler) SaveIssueFile(c *fiber.Ctx) error {
 		return c.Status(400).SendString(err.Error())
 	}
 	path := filepath.Join(h.cfg.IssuesDir, project, file)
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, []byte(body.Content), 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+	if err := os.WriteFile(path, []byte(body.Content), 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) UploadIssueReplace(c *fiber.Ctx) error {
 	project := c.Params("project")
 	file := c.Params("*")
@@ -302,15 +350,31 @@ func (h *Handler) UploadIssueReplace(c *fiber.Ctx) error {
 	if strings.Contains(strings.ToLower(file), "concluidas") {
 		return c.Status(400).SendString("concluidas ignorada")
 	}
-	fh, _ := c.FormFile("file")
-	f, _ := fh.Open()
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	defer h.closeFile(f)
-	content, _ := io.ReadAll(f)
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
 	path := filepath.Join(h.cfg.IssuesDir, project, file)
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, content, 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
+
 func (h *Handler) CreateIssue(c *fiber.Ctx) error {
 	var body struct {
 		Project  string   `json:"project"`
@@ -329,27 +393,51 @@ func (h *Handler) CreateIssue(c *fiber.Ctx) error {
 		return c.Status(400).SendString(err.Error())
 	}
 	projectDir := filepath.Join(h.cfg.IssuesDir, body.Project)
-	os.MkdirAll(projectDir, 0755)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	if !strings.HasSuffix(body.Filename, ".json") {
 		body.Filename += ".json"
 	}
 	targetPath := filepath.Join(projectDir, filepath.Base(body.Filename))
-	content, _ := json.MarshalIndent(map[string]interface{}{"demanda": body.Demanda, "raiz": body.Raiz, "arquivos": body.Arquivos, "tarefas": body.Tarefas}, "", " ")
-	os.WriteFile(targetPath, content, 0644)
+	content, err := json.MarshalIndent(map[string]interface{}{"demanda": body.Demanda, "raiz": body.Raiz, "arquivos": body.Arquivos, "tarefas": body.Tarefas}, "", " ")
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+	if err := os.WriteFile(targetPath, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": targetPath})
 }
+
 func (h *Handler) UploadIssue(c *fiber.Ctx) error {
 	project := c.FormValue("project")
-	fh, _ := c.FormFile("file")
-	f, _ := fh.Open()
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	defer h.closeFile(f)
-	content, _ := io.ReadAll(f)
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
 	projectDir := filepath.Join(h.cfg.IssuesDir, project)
-	os.MkdirAll(projectDir, 0755)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	targetPath := filepath.Join(projectDir, filepath.Base(fh.Filename))
-	os.WriteFile(targetPath, content, 0644)
+	if err := os.WriteFile(targetPath, content, 0644); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
 	return c.JSON(fiber.Map{"ok": true, "path": targetPath})
 }
+
 func (h *Handler) Run(c *fiber.Ctx) error {
 	var req struct {
 		Project string `json:"project"`
@@ -367,11 +455,13 @@ func (h *Handler) Run(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"id": run.ID})
 }
+
 func writeSSE(w *bufio.Writer, payload interface{}) {
 	line := fmt.Sprintf("data: %s\n\n", jsonString(payload))
-	w.WriteString(line)
-	w.Flush()
+	_, _ = w.WriteString(line)
+	_ = w.Flush()
 }
+
 func (h *Handler) Stream(c *fiber.Ctx) error {
 	id := c.Params("id")
 	run, ok := GetRun(id)
@@ -399,6 +489,7 @@ func (h *Handler) Stream(c *fiber.Ctx) error {
 	})
 	return nil
 }
+
 func (h *Handler) Stop(c *fiber.Ctx) error {
 	var latest *Run
 	runs.Range(func(k, v interface{}) bool {
@@ -413,5 +504,11 @@ func (h *Handler) Stop(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"ok": true})
 }
-func jsonString(v interface{}) string         { b, _ := json.Marshal(v); return string(b) }
-func (h *Handler) closeFile(f multipart.File) { f.Close() }
+
+func jsonString(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
+
+func (h *Handler) closeFile(f multipart.File) {
+	if f != nil {
+		_ = f.Close()
+	}
+}
