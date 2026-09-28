@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"mime/multipart"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rafapasa/deepseek-autocode/internal/chat"
@@ -63,6 +62,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	if body.Content == "" {
 		return c.Status(400).SendString("content vazio")
 	}
+
 	_, err := h.service.AddUserMessage(id, body.Content)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
@@ -71,6 +71,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
+
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
@@ -82,37 +83,57 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	llm := chat.NewChatLLM(h.cfg)
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		llmMessages := llmMessages
+		messages := llmMessages
 		for iter := 0; iter < 8; iter++ {
 			var full string
 			var toolCalls []dto.ToolCall
-			err := llm.StreamChat(llmMessages, tools,
-				func(delta string) { full += delta; writeSSEChat(w, fiber.Map{"type": "delta", "content": delta}) },
-				func(tc dto.ToolCall) { toolCalls = append(toolCalls, tc) },
+
+			err := llm.StreamChat(messages, tools,
+				func(delta string) {
+					full += delta
+					writeSSEChat(w, fiber.Map{"type": "delta", "content": delta})
+				},
+				func(tc dto.ToolCall) {
+					toolCalls = append(toolCalls, tc)
+				},
 			)
 			if err != nil {
 				writeSSEChat(w, fiber.Map{"type": "error", "error": err.Error()})
 				return
 			}
+
 			if len(toolCalls) == 0 {
-				h.service.AddAssistantMessage(id, full)
+				if full != "" {
+					if err := h.service.AddAssistantMessage(id, full); err != nil {
+						log.Panic(err.Error())
+					}
+				}
 				writeSSEChat(w, fiber.Map{"type": "done", "content": full})
 				return
 			}
-			// executa tools e alimenta de volta
+
 			for _, tc := range toolCalls {
 				result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
 				writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
+
 				content := result.Content
 				if !result.Success {
 					content = "ERRO: " + result.Error
+					if content == "ERRO: " {
+						content = "ERRO: falha na tool " + tc.Function.Name
+					}
 				}
-				llmMessages = append(llmMessages, dto.Message{Role: "assistant", ToolCalls: []dto.ToolCall{tc}})
-				llmMessages = append(llmMessages, dto.Message{Role: "tool", ToolCallID: tc.ID, Content: content})
-				h.service.AddToolMessage(id, tc.ID, content)
+
+				messages = append(messages, dto.Message{Role: "assistant", ToolCalls: []dto.ToolCall{tc}})
+				messages = append(messages, dto.Message{Role: "tool", ToolCallID: tc.ID, Content: content})
+				if err := h.service.AddToolMessage(id, tc.ID, content); err != nil {
+					log.Panic(err.Error())
+				}
 			}
 		}
+		writeSSEChat(w, fiber.Map{"type": "done", "content": "limite de iterações atingido"})
 	})
+
 	return nil
 }
 
@@ -121,7 +142,9 @@ func (h *ChatHandler) ExportChat(c *fiber.Ctx) error {
 	var body struct {
 		Demanda string `json:"demanda"`
 	}
-	c.BodyParser(&body)
+	if err := c.BodyParser(&body); err != nil {
+		log.Panic(err.Error())
+	}
 	path, err := h.service.ExportToIssue(id, body.Demanda)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
@@ -129,15 +152,15 @@ func (h *ChatHandler) ExportChat(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": true, "path": path})
 }
 
-func (h *ChatHandler) closeFile(f multipart.File) {
-	if err := f.Close(); err != nil {
-		log.Printf("[eTools-Code] erro fechando: %v", err)
-	}
-}
-
 func writeSSEChat(w *bufio.Writer, payload interface{}) {
 	line := fmt.Sprintf("data: %s\n\n", jsonStringChat(payload))
-	w.WriteString(line)
-	w.Flush()
+	if _, err := w.WriteString(line); err != nil {
+		log.Panic(err)
+	}
+	_ = w.Flush()
+
 }
-func jsonStringChat(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
+func jsonStringChat(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}

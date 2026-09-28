@@ -16,21 +16,21 @@ func GetTools() []dto.Tool {
 		{
 			Type: "function",
 			Function: dto.ToolFunction{
-				Name: "list_files", Description: "Lista arquivos de um diretório do projeto",
+				Name: "list_files", Description: "Lista arquivos de um diretório do projeto. Use '.' para raiz",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"dir": map[string]interface{}{"type": "string"}}, "required": []string{"dir"}},
 			},
 		},
 		{
 			Type: "function",
 			Function: dto.ToolFunction{
-				Name: "read_file", Description: "Lê conteúdo de um arquivo",
+				Name: "read_file", Description: "Lê conteúdo de um arquivo dentro do projeto",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}}, "required": []string{"path"}},
 			},
 		},
 		{
 			Type: "function",
 			Function: dto.ToolFunction{
-				Name: "write_file", Description: "Cria ou sobrescreve arquivo no projeto",
+				Name: "write_file", Description: "Cria ou sobrescreve arquivo dentro do projeto. Use para corrigir teste ou implementar funcionalidade",
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "content": map[string]interface{}{"type": "string"}}, "required": []string{"path", "content"}},
 			},
 		},
@@ -114,6 +114,10 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 		if err != nil {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
+		const maxBytes = 256 * 1024
+		if len(data) > maxBytes {
+			return ToolResult{Success: true, Content: string(data[:maxBytes]) + fmt.Sprintf("\n\n... [truncado: %d de %d bytes]", maxBytes, len(data))}
+		}
 		return ToolResult{Success: true, Content: string(data)}
 	case "write_file":
 		full, err := safeJoin(args["path"])
@@ -121,7 +125,7 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
-			log.Panicf("Err tool.ExecuteTools.os.MkdirAll: %v", err)
+			return ToolResult{Success: false, Error: err.Error()}
 		}
 		if err := os.WriteFile(full, []byte(args["content"]), 0644); err != nil {
 			return ToolResult{Success: false, Error: err.Error()}
@@ -135,7 +139,7 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 		if err := os.WriteFile(full, []byte(args["diff"]), 0644); err != nil {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
-		return ToolResult{Success: true, Content: fmt.Sprintf("Patch aplicado: %s", args["path"])}
+		return ToolResult{Success: true, Content: fmt.Sprintf("Patch aplicado: %s (%d bytes)", args["path"], len(args["diff"]))}
 	default:
 		return ToolResult{Success: false, Error: "tool desconhecida: " + toolName}
 	}
