@@ -12,6 +12,7 @@ import (
 const (
 	LLM_DEEPSEEK = 1
 	LLM_META     = 2
+	LLM_GEMINI   = 3
 )
 
 type Config struct {
@@ -19,6 +20,7 @@ type Config struct {
 	LlmClient      int    `json:"llm_client"`
 	DeepSeekApiKey string `json:"deepseek_api_key"`
 	MetaApiKey     string `json:"meta_api_key"`
+	GeminiApiKey   string `json:"gemini_api_key"`
 	HttpPort       int    `json:"http_port"`
 
 	// Dinâmica - vem da UI e é salva em ~/.ds-ac/config.json, mas também pode vir do .env

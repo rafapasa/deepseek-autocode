@@ -1,6 +1,417 @@
-.file-tree{padding-left:16px;border-left:1px dashed rgba(255,255,255,.14);margin-left:8px;display:none}
-.project.open>.file-tree{display:block}
-.file-item{padding:6px 8px;font-size:12px;color:#94A3B8;display:flex;align-items:center;border-radius:6px;margin-bottom:2px;border:1px solid transparent;overflow:visible}
-.file-item:hover{background:rgba(255,255,255,.07);color:#E2E8F0;border-color:rgba(255,255,255,.08)}
-.file-label{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
-.file-actions{display:inline-flex;gap:5px;opacity:1;visibility:visible;margin-left:6px;position:relative;z-index:2} 
+:root {
+  --bg-dark: #0a1120;       /* Fundo principal marinho ultra-escuro */
+  --bg-card: #111c33;       /* Painéis, Sidebar e Header em azul marinho eTools */
+  --bg-card-hover: #1c2b4a; /* Estado hover azul médio */
+  --border-color: #1e2e4e;  /* Bordas suavizadas */
+  --text-main: #f8fafc;
+  --text-muted: #8b9bb4;
+  --primary: #1d4ed8;       /* Azul de ação */
+  --primary-hover: #1e40af;
+  --green: #00aa4f;         /* Verde eTools extraído do logotipo */
+  --green-hover: #008a3f;
+  --danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header Navbar */
+header {
+  height: 52px;
+  background-color: #ffffff; /* Fundo branco na barra de topo */
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+}
+
+.brand-logo {
+  height: 30px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.select-project {
+  background: #f8fafc;
+  color: #0f172a; /* Texto escuro para leitura no fundo claro */
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  outline: none;
+}
+
+/* Structural Layout */
+.container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar Left */
+.sidebar {
+  width: 280px;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.btn-group {
+  display: flex;
+  gap: 6px;
+}
+
+.card-base {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+/* File Tree in Sidebar */
+.file-tree {
+  padding-left: 12px;
+  border-left: 1px dashed rgba(255, 255, 255, 0.14);
+  margin-left: 8px;
+  display: none;
+}
+
+.project.open > .file-tree {
+  display: block;
+}
+
+.file-item {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #8b9bb4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border-radius: 6px;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+
+.file-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #E2E8F0;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-actions {
+  display: inline-flex;
+  gap: 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Main Workspace */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Navigation Tabs */
+.tabs {
+  display: flex;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 12px;
+}
+
+.tab {
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+  color: var(--text-main);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+.tab.active.green {
+  border-bottom-color: var(--green);
+}
+
+/* Content & Panels */
+.content-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 2. Painel central de chat com fundo branco e contraste de texto */
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #ffffff; /* Fundo branco no painel do chat */
+  color: #0f172a;            /* Texto principal escuro */
+}
+
+.panel-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #ffffff; /* Fundo branco na área das mensagens */
+}
+
+.empty-state {
+  margin: auto;
+  color: #64748b;            /* Texto cinza legível no fundo claro */
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Área de entrada de texto do Chat */
+.chat-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 8px;
+  background: #f8fafc;       /* Rodapé do chat levemente destacado */
+}
+
+.chat-input {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  resize: none;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+.chat-input::placeholder {
+  color: #94a3b8;
+}
+
+.btn-send {
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0 16px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.btn-send:hover {
+  background: var(--green-hover);
+}
+
+/* Diff Panel Right */
+.diff-panel {
+  width: 260px;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-head {
+  padding: 12px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Buttons and Controls */
+.btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.btn.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.btn-small.green {
+  background: var(--green);
+  color: white;
+  border: none;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.9rem;
+}
+
+.icon-btn:hover {
+  color: var(--text-main);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.scroll {
+  overflow-y: auto;
+}
+
+/* Modals */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal.open {
+  display: flex;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  width: 500px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-content.sm {
+  width: 380px;
+}
+
+.modal-content input,
+.modal-content textarea {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 8px 12px;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+.modal-content textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.alert {
+  color: var(--danger);
+  font-size: 0.85rem;
+  display: none;
+}
