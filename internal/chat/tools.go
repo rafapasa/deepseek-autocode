@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
 
