@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"sort"
 
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
@@ -29,7 +31,6 @@ func parseStream(body io.Reader, onDelta func(string), onToolCall func(dto.ToolC
 		if string(data) == "[DONE]" {
 			break
 		}
-		// struct local, não depende de dto ter Delta
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
@@ -79,10 +80,23 @@ func parseStream(body io.Reader, onDelta func(string), onToolCall func(dto.ToolC
 		}
 	}
 	if onToolCall != nil {
-		for _, tc := range toolCallAcc {
-			if tc.Function.Name != "" || tc.ID != "" {
-				onToolCall(*tc)
+		idxs := make([]int, 0, len(toolCallAcc))
+		for i := range toolCallAcc {
+			idxs = append(idxs, i)
+		}
+		sort.Ints(idxs)
+		for _, i := range idxs {
+			tc := toolCallAcc[i]
+			if tc.Function.Name == "" && tc.ID == "" {
+				continue
 			}
+			if tc.Type == "" {
+				tc.Type = "function"
+			}
+			if tc.ID == "" {
+				tc.ID = fmt.Sprintf("call_%d", i)
+			}
+			onToolCall(*tc)
 		}
 	}
 	return nil

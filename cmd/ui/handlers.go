@@ -1,15 +1,14 @@
 package ui
 
 import (
-	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rafapasa/deepseek-autocode/internal/config"
@@ -456,38 +455,34 @@ func (h *Handler) Run(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"id": run.ID})
 }
 
-func writeSSE(w *bufio.Writer, payload interface{}) {
-	line := fmt.Sprintf("data: %s\n\n", jsonString(payload))
-	_, _ = w.WriteString(line)
-	_ = w.Flush()
-}
-
-func (h *Handler) Stream(c *fiber.Ctx) error {
+func (h *Handler) RunLogs(c *fiber.Ctx) error {
 	id := c.Params("id")
 	run, ok := GetRun(id)
 	if !ok {
-		return c.Status(404).SendString("run não encontrado")
+		return c.Status(404).JSON(fiber.Map{"error": "run não encontrado", "finished": true, "success": false})
 	}
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-	c.Set("Transfer-Encoding", "chunked")
-	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		for {
-			select {
-			case line, ok := <-run.Lines:
-				if !ok {
-					writeSSE(w, fiber.Map{"type": "done", "success": run.Success})
-					run.Cleanup()
-					return
-				}
-				writeSSE(w, fiber.Map{"type": "line", "text": line})
-			case <-c.Context().Done():
-				return
-			}
-		}
+	from := c.QueryInt("from", 0)
+	waitMs := c.QueryInt("wait", 15000)
+	if waitMs < 0 {
+		waitMs = 0
+	}
+	if waitMs > 25000 {
+		waitMs = 25000
+	}
+	lines, next, finished, success := run.WaitLogs(from, time.Duration(waitMs)*time.Millisecond)
+	if lines == nil {
+		lines = []string{}
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(fiber.Map{
+		"id":       run.ID,
+		"lines":    lines,
+		"from":     from,
+		"next":     next,
+		"finished": finished,
+		"success":  success,
+		"pid":      run.PID,
 	})
-	return nil
 }
 
 func (h *Handler) Stop(c *fiber.Ctx) error {
@@ -504,8 +499,6 @@ func (h *Handler) Stop(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"ok": true})
 }
-
-func jsonString(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
 func (h *Handler) closeFile(f multipart.File) {
 	if f != nil {

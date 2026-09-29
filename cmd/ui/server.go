@@ -48,9 +48,9 @@ func Start(cfg *config.Config) error {
 	app := fiber.New(fiber.Config{
 		AppName:      "eTools-Code",
 		BodyLimit:    10 * 1024 * 1024,  // Limite máximo de 10 MB para uploads e JSONs
-		ReadTimeout:  30 * time.Second,  // Timeout para leitura dos cabeçalhos/body da requisição
-		WriteTimeout: 0,                 // 0 = Sem timeout de escrita (indispensável para SSE / Stream de LLM)
-		IdleTimeout:  120 * time.Second, // Timeout de conexões ociosas
+		ReadTimeout:  30 * time.Second,   // Timeout para leitura dos cabeçalhos/body da requisição
+		WriteTimeout: 0,                  // 0 = Sem timeout de escrita (indispensável para SSE / Stream de LLM)
+		IdleTimeout:  24 * time.Hour,     // SSE de issues longas não pode cair por ociosidade
 	})
 
 	app.Use(logger.New())
@@ -126,7 +126,7 @@ func Start(cfg *config.Config) error {
 	api.Post("/issues/create", h.CreateIssue)
 	api.Post("/issues/upload", h.UploadIssue)
 	api.Post("/run", h.Run)
-	api.Get("/stream/:id", h.Stream)
+	api.Get("/run/:id/logs", h.RunLogs)
 	api.Post("/stop", h.Stop)
 	api.Get("/file/:project/*", h.GetIssueFile)
 	api.Post("/file/:project/*", h.SaveIssueFile)

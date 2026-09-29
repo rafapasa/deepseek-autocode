@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,14 +16,18 @@ import (
 )
 
 type Run struct {
-	ID      string
-	Project string
-	Issue   string
-	Lines   chan string
-	Done    chan bool
-	Success bool
-	cancel  context.CancelFunc
-	mu      sync.Mutex
+	ID       string
+	Project  string
+	Issue    string
+	History  []string
+	Notify   chan struct{}
+	Success  bool
+	Finished bool
+	Err      string
+	PID      int
+	Started  time.Time
+	cancel   context.CancelFunc
+	mu       sync.Mutex
 }
 
 var (
@@ -49,24 +52,75 @@ func StartRun(cfg *config.Config, project, issue string) (*Run, error) {
 		ID:      id,
 		Project: project,
 		Issue:   issue,
-		Lines:   make(chan string, 200),
-		Done:    make(chan bool, 1),
+		History: make([]string, 0, 512),
+		Notify:  make(chan struct{}, 8),
+		Started: time.Now(),
 		cancel:  cancel,
 	}
 	runs.Store(id, r)
-
 	go r.exec(ctx, cfg, issuePath)
 	return r, nil
 }
 
+func (r *Run) appendLine(line string) {
+	r.mu.Lock()
+	r.History = append(r.History, line)
+	r.mu.Unlock()
+	select {
+	case r.Notify <- struct{}{}:
+	default:
+	}
+}
+
+func (r *Run) snapshot(from int) (lines []string, finished, success bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if from < 0 {
+		from = 0
+	}
+	if from > len(r.History) {
+		from = len(r.History)
+	}
+	out := append([]string(nil), r.History[from:]...)
+	return out, r.Finished, r.Success
+}
+
+func (r *Run) WaitLogs(from int, wait time.Duration) (lines []string, next int, finished, success bool) {
+	lines, finished, success = r.snapshot(from)
+	if len(lines) > 0 || finished || wait <= 0 {
+		return lines, from + len(lines), finished, success
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	for {
+		select {
+		case <-r.Notify:
+			lines, finished, success = r.snapshot(from)
+			if len(lines) > 0 || finished {
+				return lines, from + len(lines), finished, success
+			}
+		case <-timer.C:
+			lines, finished, success = r.snapshot(from)
+			return lines, from + len(lines), finished, success
+		}
+	}
+}
+
 func (r *Run) exec(ctx context.Context, cfg *config.Config, issuePath string) {
-	defer close(r.Lines)
-	defer close(r.Done)
+	defer func() {
+		r.mu.Lock()
+		r.Finished = true
+		r.mu.Unlock()
+		select {
+		case r.Notify <- struct{}{}:
+		default:
+		}
+		r.Cleanup()
+	}()
 
 	binPath, err := os.Executable()
 	if err != nil {
-		r.safeSend("❌ erro ao localizar binário: " + err.Error())
-		r.Done <- false
+		r.appendLine("❌ erro ao localizar binário: " + err.Error())
 		return
 	}
 
@@ -76,49 +130,64 @@ func (r *Run) exec(ctx context.Context, cfg *config.Config, issuePath string) {
 	}
 	args = append(args, issuePath)
 
+	r.appendLine(fmt.Sprintf("[ui] executando %s %s", filepath.Base(binPath), issuePath))
+
 	cmd := exec.CommandContext(ctx, binPath, args...)
+	cmd.Env = os.Environ()
+	cmd.Dir = filepath.Dir(binPath)
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		r.safeSend("❌ erro no pipe: " + err.Error())
-		r.Done <- false
+		r.appendLine("❌ erro no pipe stdout: " + err.Error())
 		return
 	}
-	cmd.Stderr = cmd.Stdout
-	cmd.Env = os.Environ()
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		r.appendLine("❌ erro no pipe stderr: " + err.Error())
+		return
+	}
 
 	if err := cmd.Start(); err != nil {
-		r.safeSend("❌ erro ao iniciar: " + err.Error())
-		r.Done <- false
+		r.appendLine("❌ erro ao iniciar processo: " + err.Error())
+		r.mu.Lock()
+		r.Err = err.Error()
+		r.mu.Unlock()
 		return
 	}
 
-	// Espera scanner terminar antes de fechar canal
+	r.mu.Lock()
+	r.PID = cmd.Process.Pid
+	r.mu.Unlock()
+	r.appendLine(fmt.Sprintf("[ui] pid %d iniciado", cmd.Process.Pid))
+
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	pump := func(rd io.Reader) {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			text := scanner.Text()
-			// Não bloqueia se contexto cancelado
-			select {
-			case <-ctx.Done():
-				return
-			case r.Lines <- text:
-			}
+		sc := bufio.NewScanner(rd)
+		sc.Buffer(make([]byte, 1024*1024), 2*1024*1024)
+		for sc.Scan() {
+			r.appendLine(sc.Text())
 		}
-		if err := scanner.Err(); err != nil && err != io.EOF {
-			log.Printf("scanner erro: %v", err)
+		if err := sc.Err(); err != nil && err != io.EOF {
+			r.appendLine("⚠ leitura do processo: " + err.Error())
 		}
-	}()
+	}
+	wg.Add(2)
+	go pump(stdout)
+	go pump(stderr)
 
 	err = cmd.Wait()
-	wg.Wait() // garante que todo stdout foi enviado antes de fechar
+	wg.Wait()
 
 	success := err == nil
 	if err != nil {
-		r.safeSend("⚠ processo terminou com erro: " + err.Error())
+		msg := err.Error()
+		r.mu.Lock()
+		r.Err = msg
+		r.mu.Unlock()
+		r.appendLine("⚠ processo terminou com erro: " + msg)
+	} else {
+		r.appendLine("[ui] processo finalizado com sucesso")
 	}
 
 	if success {
@@ -128,39 +197,20 @@ func (r *Run) exec(ctx context.Context, cfg *config.Config, issuePath string) {
 	r.mu.Lock()
 	r.Success = success
 	r.mu.Unlock()
-	r.Done <- success
-}
-
-func (r *Run) safeSend(line string) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			// canal já fechado, ignora
-			log.Printf("safeSend recover: %v", rec)
-		}
-	}()
-	select {
-	case r.Lines <- line:
-	default:
-		// buffer cheio, tenta com timeout curto
-		select {
-		case r.Lines <- line:
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
 }
 
 func (r *Run) moveToConcluidas(issuePath string) {
 	dir := filepath.Dir(issuePath)
 	concluidas := filepath.Join(dir, "concluidas")
 	if err := os.MkdirAll(concluidas, 0755); err != nil {
-		r.safeSend("⚠ não foi possível criar pasta de concluídas: " + err.Error())
+		r.appendLine("⚠ não foi possível criar pasta de concluídas: " + err.Error())
 		return
 	}
 
 	base := filepath.Base(issuePath)
 	target := filepath.Join(concluidas, base)
 	if err := os.Rename(issuePath, target); err != nil {
-		r.safeSend("⚠ não foi possível mover a issue: " + err.Error())
+		r.appendLine("⚠ não foi possível mover a issue: " + err.Error())
 		return
 	}
 
@@ -169,7 +219,7 @@ func (r *Run) moveToConcluidas(issuePath string) {
 		_ = os.Rename(logSrc, target+".log")
 	}
 
-	r.safeSend("📦 issue movida para concluidas/" + base)
+	r.appendLine("📦 issue movida para concluidas/" + base)
 }
 
 func (r *Run) Stop() {
@@ -187,7 +237,5 @@ func GetRun(id string) (*Run, bool) {
 }
 
 func (r *Run) Cleanup() {
-	time.AfterFunc(5*time.Minute, func() { runs.Delete(r.ID) })
+	time.AfterFunc(2*time.Hour, func() { runs.Delete(r.ID) })
 }
-
-var _ = io.Discard

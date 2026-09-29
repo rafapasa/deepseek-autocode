@@ -1,38 +1,58 @@
 import { state } from './state.js';
 
+let activePump = 0;
+
 export async function renderIssuesForCurrent(){
-  const logEl=document.getElementById('runLog');
-  const issuesListEl=document.getElementById('issuesList');
-  const btn=document.getElementById('btnRunSelected');
-  const nameSpan=document.getElementById('selectedIssueName');
-  
-  if(!state.currentProject){
-    if(logEl) logEl.innerHTML='<div style="color:#64748B;text-align:center;margin-top:40px">Selecione projeto no combo superior</div>';
-    if(issuesListEl) issuesListEl.style.display='none';
-    if(btn) btn.style.display='none';
-    if(nameSpan) nameSpan.style.display='none';
-    return;
+  const logEl = document.getElementById('runLog');
+  const issuesListEl = document.getElementById('issuesList');
+  const btn = document.getElementById('btnRunSelected');
+  const nameSpan = document.getElementById('selectedIssueName');
+  const info = document.getElementById('currentProjectInfo');
+
+  if(info){
+    info.innerText = state.currentProject
+      ? `Projeto: ${state.currentProject}`
+      : 'Todos os projetos';
   }
-  
-  if(state.currentIssue && state.currentIssue.project === state.currentProject){
+
+  if(state.currentIssue && (!state.currentProject || state.currentIssue.project === state.currentProject)){
     if(btn){
-      btn.style.display='inline-flex';
+      btn.style.display = 'inline-flex';
       btn.dataset.project = state.currentIssue.project;
       btn.dataset.file = state.currentIssue.file;
     }
     if(nameSpan){
       nameSpan.textContent = state.currentIssue.file;
-      nameSpan.style.display='inline-block';
+      nameSpan.style.display = 'inline-block';
     }
   } else {
-    if(btn) btn.style.display='none';
-    if(nameSpan) nameSpan.style.display='none';
+    if(btn) btn.style.display = 'none';
+    if(nameSpan) nameSpan.style.display = 'none';
   }
-  
-  if(issuesListEl) issuesListEl.style.display='none';
-  if(logEl && !logEl.innerText.trim()){
-    logEl.innerHTML='<div style="color:#64748B;text-align:center;margin-top:40px">📋 Selecione uma issue no explorer à esquerda<br><span style="font-size:11px">e clique em Executar ▶</span></div>';
+
+  if(issuesListEl) issuesListEl.style.display = 'none';
+  if(logEl && !logEl.dataset.activeRun && !logEl.innerText.trim()){
+    logEl.innerHTML = '<div class="log-placeholder">Selecione uma issue no explorer e execute ▶</div>';
   }
+}
+
+function appendLogLine(container, text){
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const t = String(text ?? '');
+  if(/❌|erro|error|fail/i.test(t)) line.classList.add('err');
+  else if(/⚠|warn/i.test(t)) line.classList.add('warn');
+  else if(/✅|✔|sucesso|conclu/i.test(t)) line.classList.add('ok');
+  else if(/▶|iniciando|\[ui\]|\[AutoCode\]|\[ds-ac\]|\[LLM\]/i.test(t)) line.classList.add('info');
+  line.textContent = t;
+  container.appendChild(line);
+}
+
+function renderDone(container, success){
+  const resultDiv = document.createElement('div');
+  resultDiv.className = 'log-result ' + (success ? 'ok' : 'err');
+  resultDiv.textContent = success ? '✅ Concluído com sucesso' : '❌ Falhou — veja o log acima';
+  container.appendChild(resultDiv);
 }
 
 export async function runIssue(project, issue){
@@ -45,83 +65,95 @@ export async function runIssue(project, issue){
       return;
     }
   }
-  
+
   if(!confirm(`Rodar ${issue}?`)) return;
-  
-  const logEl=document.getElementById('runLog');
+
+  const logEl = document.getElementById('runLog');
   if(!logEl) return;
-  
-  const tabIssues=document.getElementById('tab-issues');
+
+  const tabIssues = document.getElementById('tab-issues');
   if(tabIssues && !tabIssues.classList.contains('active')){
     tabIssues.click();
   }
-  
-  logEl.style.display='block';
-  logEl.innerHTML=`<div style="color:#16A34A;font-weight:600">▶ Iniciando ${issue}...</div><div style="color:#94A3B8;font-size:11px;margin-bottom:8px">Projeto: ${project} • ${new Date().toLocaleTimeString()}</div><div id="logContent" style="font-family:monospace;white-space:pre-wrap;line-height:1.6"></div>`;
+
+  const pumpId = ++activePump;
+  logEl.style.display = 'block';
+  logEl.dataset.activeRun = '1';
+  logEl.innerHTML =
+    `<div class="log-head">▶ Iniciando ${issue}...</div>` +
+    `<div class="log-meta">Projeto: ${project} • ${new Date().toLocaleTimeString()}</div>` +
+    `<div id="logContent" class="log-content"></div>`;
   const contentEl = document.getElementById('logContent');
-  logEl.scrollTop=0;
-  
+  logEl.scrollTop = 0;
+
   try{
-    const res=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project,issue})});
-    if(!res.ok){ 
-      const err=await res.text();
-      contentEl.innerHTML+=`<div style="color:#ef4444">❌ Erro ao iniciar: ${err}</div>`;
-      return; 
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, issue })
+    });
+    if(!res.ok){
+      appendLogLine(contentEl, '❌ Erro ao iniciar: ' + await res.text());
+      delete logEl.dataset.activeRun;
+      return;
     }
-    const {id}=await res.json();
-    
-    let finished = false;
-    const es=new EventSource('/api/stream/'+id);
-    
-    es.onmessage=e=>{
-      try{
-        const data=JSON.parse(e.data);
-        if(data.type==='line'){
-          // Usa textContent pra preservar quebras mas escapar HTML
-          const line = document.createElement('div');
-          line.textContent = data.text;
-          contentEl.appendChild(line);
-        } else if(data.type==='done'){
-          finished = true;
-          const resultDiv = document.createElement('div');
-          resultDiv.style.marginTop='12px';
-          resultDiv.style.padding='8px 12px';
-          resultDiv.style.borderRadius='6px';
-          if(data.success){
-            resultDiv.style.background='rgba(22,163,74,0.15)';
-            resultDiv.style.color='#16A34A';
-            resultDiv.style.border='1px solid #16A34A';
-            resultDiv.innerHTML='✅ Concluído com sucesso';
-          } else {
-            resultDiv.style.background='rgba(239,68,68,0.15)';
-            resultDiv.style.color='#ef4444';
-            resultDiv.style.border='1px solid #ef4444';
-            resultDiv.innerHTML='❌ Falhou - veja log acima';
-          }
-          contentEl.appendChild(resultDiv);
-          es.close();
-          window.dispatchEvent(new Event('explorer:reload'));
-        }
-        logEl.scrollTop=logEl.scrollHeight;
-      }catch(err){
-        console.error('Erro parse SSE:', err, e.data);
-      }
-    };
-    
-    es.onerror=()=>{
-      if(!finished){
-        // Só mostra erro se não terminou normalmente
-        // EventSource fecha com error também quando o servidor fecha stream no done, então ignora se já recebeu done
-        const isNormalClose = contentEl.innerHTML.includes('Concluído') || contentEl.innerHTML.includes('Falhou');
-        if(!isNormalClose){
-          contentEl.innerHTML+=`<div style="color:#f59e0b;margin-top:8px">⚠️ Conexão com log encerrada. Se o processo ainda estiver rodando, recarregue a página.</div>`;
-        }
-      }
-      es.close();
-    };
+    const { id } = await res.json();
+    appendLogLine(contentEl, '[ui] run ' + id);
+    await pumpLogs(pumpId, id, logEl, contentEl);
   }catch(err){
-    contentEl.innerHTML+=`<div style="color:#ef4444">❌ Erro: ${err.message}</div>`;
+    appendLogLine(contentEl, '❌ Erro: ' + err.message);
+    delete logEl.dataset.activeRun;
   }
 }
+
+async function pumpLogs(pumpId, id, logEl, contentEl){
+  let from = 0;
+  let failures = 0;
+  while(pumpId === activePump){
+    try{
+      const res = await fetch(`/api/run/${encodeURIComponent(id)}/logs?from=${from}&wait=20000`, {
+        cache: 'no-store'
+      });
+      if(res.status === 404){
+        failures += 1;
+        if(failures >= 8){
+          appendLogLine(contentEl, '❌ run não encontrado no servidor');
+          break;
+        }
+        await sleep(400);
+        continue;
+      }
+      if(!res.ok){
+        failures += 1;
+        appendLogLine(contentEl, '⚠ falha ao ler log HTTP ' + res.status);
+        if(failures >= 10) break;
+        await sleep(800);
+        continue;
+      }
+      const data = await res.json();
+      failures = 0;
+      const lines = data.lines || [];
+      for(const t of lines) appendLogLine(contentEl, t);
+      if(typeof data.next === 'number') from = data.next;
+      else from += lines.length;
+      logEl.scrollTop = logEl.scrollHeight;
+      if(data.finished){
+        renderDone(contentEl, !!data.success);
+        window.dispatchEvent(new Event('explorer:reload'));
+        break;
+      }
+    }catch(err){
+      failures += 1;
+      if(failures >= 12){
+        appendLogLine(contentEl, '❌ não foi possível ler o log: ' + err.message);
+        break;
+      }
+      await sleep(Math.min(400 * failures, 2000));
+    }
+  }
+  if(pumpId === activePump) delete logEl.dataset.activeRun;
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 window.runIssue = runIssue;

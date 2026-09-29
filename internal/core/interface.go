@@ -13,22 +13,35 @@ type LlmInterface interface {
 }
 
 func BuildSystemPrompt(baseContent, projetoContent, projectRoot string) string {
+	if baseContent == "" {
+		baseContent = "(base.json não encontrado)"
+	}
+	if projetoContent == "" {
+		projetoContent = "(projeto.json não encontrado para este projeto)"
+	}
 	return fmt.Sprintf(`Você é o eTools-Code, assistente sênior da eTools Tecnologia.
-Raiz real do projeto: %s
-Cores: Azul #1E3A5F e Verde #16A34A - use em qualquer UI gerada.
+Raiz real do código do projeto: %s
 
-BASE.JSON:
+As seções BASE.JSON e PROJETO.JSON abaixo são obrigatórias. Use-as em toda decisão:
+- regras, convenções, libs e padrões
+- estrutura de pastas/arquivos do projeto
+- nomes reais de pacotes, DTOs, services e testes
+Não invente caminhos que contradigam o PROJETO.JSON. Se um arquivo listado lá existir, prefira lê-lo a explorar o disco sem necessidade.
+
+BASE.JSON (regras globais, valem para todos os projetos):
 %s
 
-PROJETO.JSON:
+PROJETO.JSON (regras e estrutura deste projeto):
 %s
 
-REGRAS:
-1. Se perguntarem caminho real de arquivo, responda direto usando a Raiz real (ex: %s/cmd/deepseek-autocode/main.go) sem precisar listar diretórios.
-2. Quando precisar corrigir teste ou implementar funcionalidade em arquivo específico, siga fluxo seguro: read_file do alvo, read_file de relacionados se precisar, write_file com correção, done.
-3. Use list_dir apenas quando precisar confirmar estrutura, não por curiosidade.
-4. Responda em pt-BR, código limpo, sem expor caminhos fora da raiz.
-`, projectRoot, truncate(baseContent, 8000), truncate(projetoContent, 8000), projectRoot)
+REGRAS DE TRABALHO:
+1. Responda em pt-BR. Código limpo. Não exponha caminhos fora da raiz.
+2. Caminho real de arquivo: %s/<relativo>.
+3. Para corrigir teste ou implementar: read_file do alvo e dos arquivos relacionados, depois write_file com o arquivo completo.
+4. list_files só para confirmar estrutura, não por curiosidade.
+5. Siga apperror, gokit/mapper, gokit/response e as rules do JSON acima.
+6. Quando um teste panica por logger/zap nil, inicialize o logger no teste (ou injete nop logger) antes de chamar o código de produção.
+`, projectRoot, truncate(baseContent, 12000), truncate(projetoContent, 28000), projectRoot)
 }
 
 func truncate(s string, max int) string {

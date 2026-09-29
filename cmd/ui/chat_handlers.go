@@ -63,11 +63,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 		return c.Status(400).SendString("content vazio")
 	}
 
-	_, err := h.service.AddUserMessage(id, body.Content)
-	if err != nil {
-		return c.Status(500).SendString(err.Error())
-	}
-	llmMessages, err := h.service.GetLLMMessages(id)
+	session, err := h.service.AddUserMessage(id, body.Content)
 	if err != nil {
 		return c.Status(500).SendString(err.Error())
 	}
@@ -75,16 +71,15 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
-	c.Set("Transfer-Encoding", "chunked")
+	c.Set("X-Accel-Buffering", "no")
 
-	session, _ := chat.LoadSession(id)
 	projectRoot := h.service.ResolveProjectRoot(session.Project)
 	tools := chat.GetTools()
 	llm := chat.NewChatLLM(h.cfg)
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		messages := llmMessages
-		for iter := 0; iter < 8; iter++ {
+		for iter := 0; iter < 16; iter++ {
+			messages := chat.SanitizeMessages(session.Messages)
 			var full string
 			var toolCalls []dto.ToolCall
 
@@ -94,6 +89,12 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 					writeSSEChat(w, fiber.Map{"type": "delta", "content": delta})
 				},
 				func(tc dto.ToolCall) {
+					if tc.Type == "" {
+						tc.Type = "function"
+					}
+					if tc.ID == "" {
+						tc.ID = fmt.Sprintf("call_%d_%d", iter, len(toolCalls))
+					}
 					toolCalls = append(toolCalls, tc)
 				},
 			)
@@ -104,18 +105,21 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 
 			if len(toolCalls) == 0 {
 				if full != "" {
-					if err := h.service.AddAssistantMessage(id, full); err != nil {
-						log.Printf("[ERRO] %v", err.Error())
+					session.Messages = append(session.Messages, dto.Message{Role: "assistant", Content: full})
+					if err := h.service.PersistTurn(session); err != nil {
+						log.Printf("[chat] persist: %v", err)
 					}
 				}
 				writeSSEChat(w, fiber.Map{"type": "done", "content": full})
 				return
 			}
 
+			assistant := dto.Message{Role: "assistant", Content: full, ToolCalls: toolCalls}
+			session.Messages = append(session.Messages, assistant)
+
 			for _, tc := range toolCalls {
 				result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
 				writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
-
 				content := result.Content
 				if !result.Success {
 					content = "ERRO: " + result.Error
@@ -123,12 +127,15 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 						content = "ERRO: falha na tool " + tc.Function.Name
 					}
 				}
-
-				messages = append(messages, dto.Message{Role: "assistant", ToolCalls: []dto.ToolCall{tc}})
-				messages = append(messages, dto.Message{Role: "tool", ToolCallID: tc.ID, Content: content})
-				if err := h.service.AddToolMessage(id, tc.ID, content); err != nil {
-					log.Printf("[ERRO] %v", err.Error())
-				}
+				session.Messages = append(session.Messages, dto.Message{
+					Role:       "tool",
+					ToolCallID: tc.ID,
+					Name:       tc.Function.Name,
+					Content:    content,
+				})
+			}
+			if err := h.service.PersistTurn(session); err != nil {
+				log.Printf("[chat] persist tools: %v", err)
 			}
 		}
 		writeSSEChat(w, fiber.Map{"type": "done", "content": "limite de iterações atingido"})
@@ -158,8 +165,8 @@ func writeSSEChat(w *bufio.Writer, payload interface{}) {
 		log.Printf("[ERRO] %v", err)
 	}
 	_ = w.Flush()
-
 }
+
 func jsonStringChat(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)

@@ -31,9 +31,11 @@ help:
 build:
 	@echo "🔨 Compilando $(BIN_NAME)..."
 	@go build -o $(BIN_PATH) $(CMD_PATH)
+	@sudo cp -f $(BIN_PATH) /usr/local/bin/$(BIN_NAME)
+	@sudo chmod 755 /usr/local/bin/$(BIN_NAME)
 	@echo "🔐 Corrigindo contexto SELinux..."
-	@sudo restorecon -v $(BIN_PATH) 2>/dev/null || true
-	@echo "✅ Binário pronto: $(BIN_PATH)"
+	@sudo restorecon -v $(BIN_PATH) /usr/local/bin/$(BIN_NAME) 2>/dev/null || true
+	@echo "✅ Binário pronto: $(BIN_PATH) e /usr/local/bin/$(BIN_NAME)"
 
 # ------------------------------------------------------------
 # Kill (mata processos órfãos + libera a porta)
@@ -124,3 +126,36 @@ clean:
 dev: build
 	@echo "🚧 Rodando em foreground (Ctrl+C para sair)..."
 	@$(BIN_PATH) --ui --port $(PORT)
+
+
+# ------------------------------------------------------------
+# Diagnóstico do unit (sandbox / read-only)
+# ------------------------------------------------------------
+.PHONY: unit
+unit:
+	@echo "=== systemctl cat ==="
+	@sudo systemctl cat $(SERVICE) || true
+	@echo ""
+	@echo "=== show Protect* ==="
+	@sudo systemctl show $(SERVICE) -p User,Group,ProtectSystem,ProtectHome,ReadOnlyPaths,ReadWritePaths,BindPaths,TemporaryFileSystem,NoNewPrivileges,PrivateTmp,RootDirectory,RootImage,ProtectProc || true
+	@echo ""
+	@echo "=== binary ==="
+	@ls -la /usr/local/bin/$(BIN_NAME) $(BIN_PATH) 2>/dev/null || true
+	@echo ""
+	@echo "=== mount /home ==="
+	@findmnt /home /home/opc /home/opc/prj 2>/dev/null || true
+
+# ------------------------------------------------------------
+# Libera escrita nos projetos (ProtectHome=read-only no unit)
+# ------------------------------------------------------------
+.PHONY: unlock-fs
+unlock-fs:
+	@echo "🔓 Ajustando ReadWritePaths do $(SERVICE)..."
+	@sudo mkdir -p /etc/systemd/system/$(SERVICE).service.d
+	@printf '%s\n' '[Service]' 'ProtectHome=read-only' 'ReadWritePaths=/home/opc/prj /home/opc/.ds-ac' | sudo tee /etc/systemd/system/$(SERVICE).service.d/write.conf >/dev/null
+	@sudo systemctl daemon-reload
+	@sudo systemctl restart $(SERVICE)
+	@sleep 1
+	@sudo systemctl show $(SERVICE) -p ReadWritePaths,ProtectHome
+	@echo "✅ Serviço reiniciado com escrita em /home/opc/prj"
+

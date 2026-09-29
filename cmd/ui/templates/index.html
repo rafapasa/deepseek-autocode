@@ -21,17 +21,22 @@
         <aside class="sidebar">
             <div class="sidebar-section">
                 <div class="sidebar-title">
-                    ISSUES
+                    EXPLORER
                     <span class="btn-group">
                         <button class="btn-small green" id="btnNewIssue">+ nova</button>
-                        <button class="btn-small" id="btnUploadIssue">⤴ upload</button>
+                        <button class="btn-small" id="btnUploadIssue">upload</button>
                     </span>
                 </div>
                 <div id="baseCard" class="card-base">
-                    <div class="card-row">
-                        <span>✓ base.json (global)</span>
-                        <span><button class="icon-btn" data-action="editBase">✎</button><button class="icon-btn"
-                                data-action="uploadBase">⤴</button></span>
+                    <div class="file-item base-file">
+                        <span class="file-label">
+                            <span class="file-icon json-icon" aria-hidden="true">{ }</span>
+                            <span class="file-name">base.json</span>
+                            <span class="file-check" title="global">●</span>
+                        </span>
+                        <button type="button" class="kebab-btn" title="Ações" aria-label="Ações">
+                            <span></span><span></span><span></span>
+                        </button>
                     </div>
                 </div>
                 <div id="projectList"></div>
@@ -62,8 +67,7 @@
 
                 <section class="chat-panel" id="chatPanel">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="empty-state">Selecione projeto no combo - explorer à esquerda NÃO altera o combo
-                        </div>
+                        <div class="empty-state">Selecione um projeto no combo superior para usar o chat</div>
                     </div>
                     <div class="chat-input-area">
                         <textarea id="chatInput" class="chat-input" placeholder="Pergunte..." rows="1"></textarea>
@@ -119,6 +123,7 @@
         </div>
     </div>
 
+    <div id="itemMenu" class="item-menu" hidden></div>
     <script type="module" src="/static/js/app.js"></script>
 </body>
 
