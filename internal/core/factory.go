@@ -8,6 +8,8 @@ func NewLlmClient(cfg config.Config) LlmInterface {
 		return NewDeepSeekClient(cfg.DeepSeekApiKey)
 	case config.LLM_META:
 		return NewLlamaClient(cfg.MetaApiKey)
+	case config.LLM_GEMINI:
+		return NewGeminiClient(cfg.GeminiApiKey)
 	default:
 		if cfg.MetaApiKey != "" {
 			return NewLlamaClient(cfg.MetaApiKey)

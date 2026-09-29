@@ -3,7 +3,6 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,12 +52,12 @@ type ToolResult struct {
 func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 	var args map[string]string
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		log.Panicf("Erro tool.ExecuteTool.Unmarshal: %v", err)
+		return ToolResult{Success: false, Error: fmt.Sprintf("args inválidos: %v", err)}
 	}
 	if len(args) == 0 {
 		var generic map[string]interface{}
 		if err := json.Unmarshal([]byte(argsJSON), &generic); err != nil {
-			log.Panicf("Erro tool.ExecuteTool.Unmarshal: %v", err)
+			return ToolResult{Success: false, Error: fmt.Sprintf("args inválidos: %v", err)}
 		}
 		args = make(map[string]string)
 		for k, v := range generic {

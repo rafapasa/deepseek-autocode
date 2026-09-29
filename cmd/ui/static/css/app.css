@@ -415,3 +415,71 @@ header {
   font-size: 0.85rem;
   display: none;
 }
+
+/* Chat bubbles - alinhamento como Meta AI / ChatGPT */
+.chat-messages {
+  gap: 16px;
+  padding: 20px 16px;
+}
+
+.message {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  line-height: 1.5;
+  font-size: 0.9rem;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  animation: messageIn 0.2s ease-out;
+}
+
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message.user {
+  align-self: flex-end;
+  background: #1E3A5F;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.message.assistant {
+  align-self: flex-start;
+  background: #F1F5F9;
+  color: #0F172A;
+  border: 1px solid #E2E8F0;
+  border-bottom-left-radius: 4px;
+}
+
+.message.assistant a {
+  color: #1D4ED8;
+  text-decoration: underline;
+}
+
+.message.system {
+  align-self: center;
+  background: #FFFBEB;
+  color: #92400E;
+  font-size: 0.8rem;
+  border: 1px dashed #F59E0B;
+  border-radius: 8px;
+  max-width: 90%;
+  text-align: center;
+  padding: 8px 12px;
+}
+
+/* Code blocks dentro das mensagens */
+.message pre,
+.message div[style*="background:#0F172A"] {
+  max-width: 100%;
+  margin: 8px 0 !important;
+  border-radius: 8px !important;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .message { max-width: 85%; }
+}

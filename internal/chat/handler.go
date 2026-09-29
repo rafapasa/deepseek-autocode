@@ -119,7 +119,7 @@ func (s *Service) ExportToIssue(sessionID, demanda string) (string, error) {
 	}
 	projectDir := filepath.Join(s.cfg.IssuesDir, session.Project)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		log.Panicf("Erro handler.ExprtToIssue.os.MkDirAll: %v", err)
+		log.Printf("Erro handler.ExportToIssue Mkdir: %v", err)
 	}
 	last := ""
 	for i := len(session.Messages) - 1; i >= 0; i-- {

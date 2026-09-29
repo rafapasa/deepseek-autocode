@@ -18,6 +18,31 @@ type GeminiClient struct {
 	http   *http.Client
 }
 
+// Estruturas customizadas para injetar o thought_signature exigido pelo Gemini em tool_calls
+type geminiToolCall struct {
+	ID               string           `json:"id"`
+	Type             string           `json:"type"`
+	Function         dto.FunctionCall `json:"function"`
+	ThoughtSignature string           `json:"thought_signature"`
+}
+
+type geminiMessage struct {
+	Role       string           `json:"role"`
+	Content    string           `json:"content,omitempty"`
+	ToolCalls  []geminiToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
+}
+
+type geminiPayload struct {
+	Model       string          `json:"model"`
+	Messages    []geminiMessage `json:"messages"`
+	Temperature float64         `json:"temperature"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Stream      bool            `json:"stream,omitempty"`
+	Tools       []dto.Tool      `json:"tools,omitempty"`
+	ToolChoice  string          `json:"tool_choice,omitempty"`
+}
+
 func NewGeminiClient(apiKey string) LlmInterface {
 	if apiKey == "" {
 		panic("GEMINI_API_KEY não definida (use --key ou export GEMINI_API_KEY)")
@@ -25,24 +50,90 @@ func NewGeminiClient(apiKey string) LlmInterface {
 	return &GeminiClient{
 		apiKey: apiKey,
 		url:    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-		model:  "gemini-2.5-flash",
+		model:  "gemini-3.8-flash",
 		http:   &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
-// NewGeminiClientWithModel permite definir outro modelo do Gemini (ex: gemini-2.5-pro, gemini-2.0-flash)
 func NewGeminiClientWithModel(apiKey, model string) LlmInterface {
 	client := NewGeminiClient(apiKey).(*GeminiClient)
 	if model != "" {
+		if len(model) > 7 && model[:7] == "models/" {
+			model = model[7:]
+		}
 		client.model = model
 	}
 	return client
 }
 
+// prepareMessages converte []dto.Message garantindo o campo thought_signature nas chamadas de ferramentas passadas no histórico
+func prepareMessages(messages []dto.Message) []geminiMessage {
+	out := make([]geminiMessage, len(messages))
+	for i, m := range messages {
+		gm := geminiMessage{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		if len(m.ToolCalls) > 0 {
+			gm.ToolCalls = make([]geminiToolCall, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				gm.ToolCalls[j] = geminiToolCall{
+					ID:               tc.ID,
+					Type:             tc.Type,
+					Function:         tc.Function,
+					ThoughtSignature: "skip_thought_signature",
+				}
+			}
+		}
+		out[i] = gm
+	}
+	return out
+}
+
+// executeWithRetry faz a tentativa automática em caso de instabilidade temporária (HTTP 503)
+func (c *GeminiClient) executeWithRetry(req *http.Request) (*http.Response, error) {
+	maxRetries := 3
+	var resp *http.Response
+	var err error
+
+	var bodyBytes []byte
+	if req.Body != nil {
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		reqClone := req.Clone(req.Context())
+		if bodyBytes != nil {
+			reqClone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+
+		resp, err = c.http.Do(reqClone)
+		if err == nil && resp.StatusCode != 503 {
+			return resp, nil
+		}
+
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	reqClone := req.Clone(req.Context())
+	if bodyBytes != nil {
+		reqClone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+	return c.http.Do(reqClone)
+}
+
 func (c *GeminiClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
-	payload := dto.ChatRequest{
+	payload := geminiPayload{
 		Model:       c.model,
-		Messages:    messages,
+		Messages:    prepareMessages(messages),
 		Temperature: 0.2,
 		MaxTokens:   8192,
 	}
@@ -56,7 +147,7 @@ func (c *GeminiClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Chat
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.executeWithRetry(req)
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +170,9 @@ func (c *GeminiClient) Chat(messages []dto.Message, tools []dto.Tool) (*dto.Chat
 }
 
 func (c *GeminiClient) ChatStream(messages []dto.Message, tools []dto.Tool, onDelta func(string), onToolCall func(dto.ToolCall)) error {
-	payload := dto.ChatRequest{
+	payload := geminiPayload{
 		Model:       c.model,
-		Messages:    messages,
+		Messages:    prepareMessages(messages),
 		Temperature: 0.2,
 		Stream:      true,
 	}
@@ -95,7 +186,7 @@ func (c *GeminiClient) ChatStream(messages []dto.Message, tools []dto.Tool, onDe
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.executeWithRetry(req)
 	if err != nil {
 		return err
 	}

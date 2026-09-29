@@ -50,6 +50,7 @@ func NewConfig() *Config {
 		LlmClient:       getEnvAsInt("LLM_CLIENT", LLM_DEEPSEEK),
 		DeepSeekApiKey:  getEnv("DEEPSEEK_API_KEY", ""),
 		MetaApiKey:      getEnv("META_API_KEY", ""),
+		GeminiApiKey:    getEnv("GEMINI_API_KEY", ""),
 		HttpPort:        getEnvAsInt("HTTP_PORT", 8080),
 		IssuesDir:       getEnv("ISSUES_DIR", "/home/opc/prj/issues"),
 		BaseJsonPath:    getEnv("DS_AC_BASE", "/home/opc/prj/issues/base.json"),

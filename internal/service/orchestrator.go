@@ -4,9 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
+)
+
+const (
+	MaxToolResultBytes = 100 * 1024 // 100 KB max por resposta de tool para proteger o contexto
+	MaxRetriesPerTurn  = 3          // Tentativas em caso de erro de API/Rede
 )
 
 type Orchestrator struct {
@@ -39,28 +45,46 @@ func (o *Orchestrator) Start(req dto.Request) error {
 	for i := 0; i < maxIterations; i++ {
 		fmt.Printf("\n[AutoCode] --- Turno %d ---\n", i+1)
 
-		resp, err := o.client.Chat(messages, tools)
+		// 1. Retry resiliente no Chat
+		resp, err := o.chatWithRetry(messages, tools)
 		if err != nil {
-			return fmt.Errorf("erro no chat: %v", err)
+			return fmt.Errorf("falha irrecuperável na API no turno %d: %v", i+1, err)
+		}
+
+		// 2. Validação contra Panic
+		if resp == nil || len(resp.Choices) == 0 {
+			fmt.Println("[AutoCode] ERRO: Resposta da API veio sem escolhas (choices vazias). Tentando prosseguir...")
+			messages = append(messages, dto.Message{
+				Role:    "user",
+				Content: "Sua última resposta veio vazia. Por favor, continue a tarefa ou forneça uma resposta.",
+			})
+			continue
 		}
 
 		choice := resp.Choices[0]
 		totalTokens += resp.Usage.TotalTokens
-		fmt.Printf("[DeepSeek] tokens: %d (acumulado: %d) | finish: %s\n",
+		fmt.Printf("[LLM] tokens: %d (acumulado: %d) | finish: %s\n",
 			resp.Usage.TotalTokens, totalTokens, choice.FinishReason)
-
-		if choice.FinishReason == "length" {
-			fmt.Println("[AutoCode] AVISO: output truncado (max_tokens). Reduza o tamanho das escritas.")
-		}
 
 		msg := choice.Message
 		messages = append(messages, msg)
 
+		// 3. Tratamento para saída truncada por max_tokens
+		if choice.FinishReason == "length" {
+			fmt.Println("[AutoCode] AVISO: output truncado (max_tokens). Solicitando continuidade...")
+			messages = append(messages, dto.Message{
+				Role:    "user",
+				Content: "Sua resposta anterior foi truncada pelo limite de tokens. Por favor, continue de onde parou de forma mais concisa.",
+			})
+		}
+
+		// Se não houver chamadas de ferramenta, finalizou
 		if len(msg.ToolCalls) == 0 {
-			fmt.Printf("\n[DeepSeek] Resposta final: %s\n", msg.Content)
+			fmt.Printf("\n[LLM] Resposta final: %s\n", msg.Content)
 			break
 		}
 
+		// Execução das Tools
 		for _, call := range msg.ToolCalls {
 			fmt.Printf("[Tool] %s(%s)\n", call.Function.Name, truncate(call.Function.Arguments, 120))
 
@@ -68,7 +92,7 @@ func (o *Orchestrator) Start(req dto.Request) error {
 				var p struct {
 					Summary string `json:"summary"`
 				}
-				json.Unmarshal([]byte(call.Function.Arguments), &p)
+				_ = json.Unmarshal([]byte(call.Function.Arguments), &p)
 				fmt.Printf("\n[AutoCode] CONCLUÍDO: %s\n", p.Summary)
 				fmt.Printf("[AutoCode] Tokens totais: %d\n", totalTokens)
 				return nil
@@ -76,10 +100,16 @@ func (o *Orchestrator) Start(req dto.Request) error {
 
 			result, err := executor.Execute(call)
 			if err != nil {
-				result = fmt.Sprintf("ERRO: %v", err)
+				result = fmt.Sprintf("ERRO NA FERRAMENTA: %v", err)
 				fmt.Printf("[Tool] erro: %v\n", err)
 			} else {
 				fmt.Printf("[Tool] ok (%d bytes)\n", len(result))
+			}
+
+			// 4. Limitação do tamanho do resultado para não estourar a memória/contexto
+			if len(result) > MaxToolResultBytes {
+				fmt.Printf("[Tool] AVISO: resultado da tool truncado de %d bytes para %d bytes\n", len(result), MaxToolResultBytes)
+				result = result[:MaxToolResultBytes] + "\n... [CONTEÚDO TRUNCADO DEVIDO AO TAMANHO EXCESSIVO]"
 			}
 
 			messages = append(messages, dto.Message{
@@ -92,6 +122,26 @@ func (o *Orchestrator) Start(req dto.Request) error {
 
 	fmt.Printf("\n[AutoCode] Atingiu maxIterations (%d). Tokens: %d\n", maxIterations, totalTokens)
 	return nil
+}
+
+// chatWithRetry realiza tentativas com pausa progressiva em caso de falhas da API
+func (o *Orchestrator) chatWithRetry(messages []dto.Message, tools []dto.Tool) (*dto.ChatResponse, error) {
+	var lastErr error
+	for attempt := 1; attempt <= MaxRetriesPerTurn; attempt++ {
+		resp, err := o.client.Chat(messages, tools)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+		fmt.Printf("[AutoCode] AVISO: erro na chamada LLM (tentativa %d/%d): %v\n", attempt, MaxRetriesPerTurn, err)
+
+		if attempt < MaxRetriesPerTurn {
+			waitTime := time.Duration(attempt*2) * time.Second
+			time.Sleep(waitTime)
+		}
+	}
+	return nil, lastErr
 }
 
 // ============================================================

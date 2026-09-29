@@ -105,7 +105,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 			if len(toolCalls) == 0 {
 				if full != "" {
 					if err := h.service.AddAssistantMessage(id, full); err != nil {
-						log.Panic(err.Error())
+						log.Printf("[ERRO] %v", err.Error())
 					}
 				}
 				writeSSEChat(w, fiber.Map{"type": "done", "content": full})
@@ -127,7 +127,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 				messages = append(messages, dto.Message{Role: "assistant", ToolCalls: []dto.ToolCall{tc}})
 				messages = append(messages, dto.Message{Role: "tool", ToolCallID: tc.ID, Content: content})
 				if err := h.service.AddToolMessage(id, tc.ID, content); err != nil {
-					log.Panic(err.Error())
+					log.Printf("[ERRO] %v", err.Error())
 				}
 			}
 		}
@@ -143,7 +143,7 @@ func (h *ChatHandler) ExportChat(c *fiber.Ctx) error {
 		Demanda string `json:"demanda"`
 	}
 	if err := c.BodyParser(&body); err != nil {
-		log.Panic(err.Error())
+		log.Printf("[ERRO] %v", err.Error())
 	}
 	path, err := h.service.ExportToIssue(id, body.Demanda)
 	if err != nil {
@@ -155,7 +155,7 @@ func (h *ChatHandler) ExportChat(c *fiber.Ctx) error {
 func writeSSEChat(w *bufio.Writer, payload interface{}) {
 	line := fmt.Sprintf("data: %s\n\n", jsonStringChat(payload))
 	if _, err := w.WriteString(line); err != nil {
-		log.Panic(err)
+		log.Printf("[ERRO] %v", err)
 	}
 	_ = w.Flush()
 
