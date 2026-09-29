@@ -1,5 +1,5 @@
 import { createNewChat, sendMessage } from './chat.js';
-import { loadExplorer, loadProjectSelector, toggleExplorer } from './explorer.js';
+import { loadExplorer, loadProjectSelector, toggleExplorer, selectIssue } from './explorer.js';
 import { renderIssuesForCurrent, runIssue } from './issues.js';
 import * as modals from './modals.js';
 import { saveCurrentProject, state } from './state.js';
@@ -7,7 +7,10 @@ import { saveCurrentProject, state } from './state.js';
 async function init(){
   await loadProjectSelector();
   await loadExplorer();
-  if(state.currentProject){ await createNewChat(); await renderIssuesForCurrent(); }
+  if(state.currentProject){
+    await createNewChat();
+    await renderIssuesForCurrent();
+  }
   bindEvents();
 }
 
@@ -20,26 +23,58 @@ function bindEvents(){
       state.currentChatId=null;
       const info=document.getElementById('currentProjectInfo');
       if(info) info.innerText=state.currentProject?`Projeto atual: ${state.currentProject}`:'Todos';
-      if(state.currentProject){ await createNewChat(); await renderIssuesForCurrent(); }
+      if(state.currentProject){
+        await createNewChat();
+        await renderIssuesForCurrent();
+      }
     });
   }
+
   const pl=document.getElementById('projectList');
   if(pl){
     pl.addEventListener('click', (e)=>{
-      const header=e.target.closest('.project-header');
-      if(header){ toggleExplorer(header.dataset.project); return; }
+      // Botões de ação primeiro
       const editP=e.target.closest('[data-edit-projeto]'); if(editP){ modals.editProjeto(editP.dataset.editProjeto); return; }
       const upP=e.target.closest('[data-upload-projeto]'); if(upP){ modals.uploadProjeto(upP.dataset.uploadProjeto); return; }
       const edit=e.target.closest('[data-edit]'); if(edit){ const [proj,file]=edit.dataset.edit.split('|'); modals.editIssue(proj,file); return; }
       const rep=e.target.closest('[data-replace]'); if(rep){ const [proj,file]=rep.dataset.replace.split('|'); modals.uploadReplaceIssue(proj,file); return; }
+      
+      // Header do projeto - expande/colapsa
+      const header=e.target.closest('.project-header');
+      if(header){ toggleExplorer(header.dataset.project); return; }
+      
+      // Clique no arquivo de issue - seleciona
+      const fileItem=e.target.closest('.file-item');
+      if(fileItem && fileItem.dataset.issueFile){
+        const project = fileItem.dataset.issueProject;
+        const file = fileItem.dataset.issueFile;
+        selectIssue(project, file);
+        // Troca pra aba Issues automaticamente
+        const tabIssues=document.getElementById('tab-issues');
+        if(tabIssues) tabIssues.click();
+      }
     });
   }
+
   const il=document.getElementById('issuesList');
   if(il){
     il.addEventListener('click', (e)=>{
       const run=e.target.closest('[data-run]'); if(run){ const [proj,file]=run.dataset.run.split('|'); runIssue(proj,file); }
     });
   }
+
+  // Botão Executar no topo direito do painel Issues
+  const btnRunSelected=document.getElementById('btnRunSelected');
+  if(btnRunSelected){
+    btnRunSelected.addEventListener('click', ()=>{
+      const project = btnRunSelected.dataset.project || (state.currentIssue && state.currentIssue.project);
+      const file = btnRunSelected.dataset.file || (state.currentIssue && state.currentIssue.file);
+      if(project && file){
+        runIssue(project, file);
+      }
+    });
+  }
+
   const bs=document.getElementById('btnSend');
   if(bs) bs.addEventListener('click', sendMessage);
   const ci=document.getElementById('chatInput');
@@ -82,6 +117,9 @@ function switchTab(tab){
   if(cp) cp.style.display=tab==='chat'?'flex':'none';
   if(dp) dp.style.display=tab==='chat'?'flex':'none';
   if(ip) ip.style.display=tab==='issues'?'flex':'none';
+  if(tab==='issues'){
+    renderIssuesForCurrent();
+  }
 }
 
 init();

@@ -24,6 +24,7 @@ type Run struct {
 	Done    chan bool
 	Success bool
 	cancel  context.CancelFunc
+	mu      sync.Mutex
 }
 
 var (
@@ -48,7 +49,7 @@ func StartRun(cfg *config.Config, project, issue string) (*Run, error) {
 		ID:      id,
 		Project: project,
 		Issue:   issue,
-		Lines:   make(chan string, 100),
+		Lines:   make(chan string, 200),
 		Done:    make(chan bool, 1),
 		cancel:  cancel,
 	}
@@ -64,73 +65,102 @@ func (r *Run) exec(ctx context.Context, cfg *config.Config, issuePath string) {
 
 	binPath, err := os.Executable()
 	if err != nil {
-		r.Lines <- "❌ erro ao localizar binário: " + err.Error()
+		r.safeSend("❌ erro ao localizar binário: " + err.Error())
 		r.Done <- false
 		return
 	}
 
-	// Agora tudo vem da struct cfg, não mais de os.Getenv solto
-	// Mas ainda passamos --key pro subprocesso pra compatibilidade
 	args := []string{}
 	if key := cfg.ResolveAPIKey(); key != "" {
 		args = append(args, "--key", key)
 	}
-	// A porta e outras configs o binário filho vai ler do .env também
 	args = append(args, issuePath)
 
 	cmd := exec.CommandContext(ctx, binPath, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		r.Lines <- "❌ erro no pipe: " + err.Error()
+		r.safeSend("❌ erro no pipe: " + err.Error())
 		r.Done <- false
 		return
 	}
 	cmd.Stderr = cmd.Stdout
-
-	// Garante que o filho herda o .env (DeepSeek/Meta keys)
-	// O filho vai chamar config.NewConfig() de novo e ler do .env
 	cmd.Env = os.Environ()
 
 	if err := cmd.Start(); err != nil {
-		r.Lines <- "❌ erro ao iniciar: " + err.Error()
+		r.safeSend("❌ erro ao iniciar: " + err.Error())
 		r.Done <- false
 		return
 	}
 
+	// Espera scanner terminar antes de fechar canal
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		scanner := bufio.NewScanner(stdout)
-		if scanner.Err() != nil {
-			log.Printf("Erro: %s", scanner.Err().Error())
-		}
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for scanner.Scan() {
-			r.Lines <- scanner.Text()
+			text := scanner.Text()
+			// Não bloqueia se contexto cancelado
+			select {
+			case <-ctx.Done():
+				return
+			case r.Lines <- text:
+			}
+		}
+		if err := scanner.Err(); err != nil && err != io.EOF {
+			log.Printf("scanner erro: %v", err)
 		}
 	}()
 
 	err = cmd.Wait()
+	wg.Wait() // garante que todo stdout foi enviado antes de fechar
+
 	success := err == nil
+	if err != nil {
+		r.safeSend("⚠ processo terminou com erro: " + err.Error())
+	}
 
 	if success {
 		r.moveToConcluidas(issuePath)
 	}
 
+	r.mu.Lock()
 	r.Success = success
+	r.mu.Unlock()
 	r.Done <- success
+}
+
+func (r *Run) safeSend(line string) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			// canal já fechado, ignora
+			log.Printf("safeSend recover: %v", rec)
+		}
+	}()
+	select {
+	case r.Lines <- line:
+	default:
+		// buffer cheio, tenta com timeout curto
+		select {
+		case r.Lines <- line:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 func (r *Run) moveToConcluidas(issuePath string) {
 	dir := filepath.Dir(issuePath)
 	concluidas := filepath.Join(dir, "concluidas")
 	if err := os.MkdirAll(concluidas, 0755); err != nil {
-		r.Lines <- "⚠ não foi possível criar pasta de concluídas: " + err.Error()
+		r.safeSend("⚠ não foi possível criar pasta de concluídas: " + err.Error())
 		return
 	}
 
 	base := filepath.Base(issuePath)
 	target := filepath.Join(concluidas, base)
 	if err := os.Rename(issuePath, target); err != nil {
-		r.Lines <- "⚠ não foi possível mover a issue: " + err.Error()
+		r.safeSend("⚠ não foi possível mover a issue: " + err.Error())
 		return
 	}
 
@@ -139,7 +169,7 @@ func (r *Run) moveToConcluidas(issuePath string) {
 		_ = os.Rename(logSrc, target+".log")
 	}
 
-	r.Lines <- "📦 issue movida para concluidas/" + base
+	r.safeSend("📦 issue movida para concluidas/" + base)
 }
 
 func (r *Run) Stop() {

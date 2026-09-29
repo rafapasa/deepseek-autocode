@@ -18,12 +18,17 @@ type GeminiClient struct {
 	http   *http.Client
 }
 
-// Estruturas customizadas para injetar o thought_signature exigido pelo Gemini em tool_calls
+type geminiFunctionCall struct {
+	Name             string `json:"name"`
+	Arguments        string `json:"arguments"`
+	ThoughtSignature string `json:"thought_signature,omitempty"`
+}
+
 type geminiToolCall struct {
-	ID               string           `json:"id"`
-	Type             string           `json:"type"`
-	Function         dto.FunctionCall `json:"function"`
-	ThoughtSignature string           `json:"thought_signature"`
+	ID               string             `json:"id"`
+	Type             string             `json:"type"`
+	Function         geminiFunctionCall `json:"function"`
+	ThoughtSignature string             `json:"thought_signature,omitempty"`
 }
 
 type geminiMessage struct {
@@ -66,7 +71,7 @@ func NewGeminiClientWithModel(apiKey, model string) LlmInterface {
 	return client
 }
 
-// prepareMessages converte []dto.Message garantindo o campo thought_signature nas chamadas de ferramentas passadas no histórico
+// prepareMessages converte []dto.Message garantindo o campo thought_signature em TODOS os níveis da chamada da função
 func prepareMessages(messages []dto.Message) []geminiMessage {
 	out := make([]geminiMessage, len(messages))
 	for i, m := range messages {
@@ -78,11 +83,23 @@ func prepareMessages(messages []dto.Message) []geminiMessage {
 		if len(m.ToolCalls) > 0 {
 			gm.ToolCalls = make([]geminiToolCall, len(m.ToolCalls))
 			for j, tc := range m.ToolCalls {
+				sig := tc.ThoughtSignature
+				if sig == "" {
+					sig = tc.Function.ThoughtSignature
+				}
+				if sig == "" {
+					sig = "skip_thought_signature"
+				}
+
 				gm.ToolCalls[j] = geminiToolCall{
-					ID:               tc.ID,
-					Type:             tc.Type,
-					Function:         tc.Function,
-					ThoughtSignature: "skip_thought_signature",
+					ID:   tc.ID,
+					Type: tc.Type,
+					Function: geminiFunctionCall{
+						Name:             tc.Function.Name,
+						Arguments:        tc.Function.Arguments,
+						ThoughtSignature: sig,
+					},
+					ThoughtSignature: sig,
 				}
 			}
 		}

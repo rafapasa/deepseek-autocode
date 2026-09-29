@@ -47,10 +47,16 @@
             <div class="content-area">
                 <section class="chat-panel" id="issuesPanel" style="display:none">
                     <div class="panel-head">
-                        <h3>Issues</h3>
-                        <div id="currentProjectInfo" class="muted"></div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <h3>Issues</h3>
+                            <span id="selectedIssueName" class="muted small" style="display:none"></span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div id="currentProjectInfo" class="muted small"></div>
+                            <button id="btnRunSelected" class="btn primary" style="display:none">▶ Executar</button>
+                        </div>
                     </div>
-                    <div id="issuesList" class="scroll"></div>
+                    <div id="issuesList" class="scroll" style="display:none"></div>
                     <div id="runLog" class="run-log"></div>
                 </section>
 

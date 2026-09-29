@@ -11,14 +11,16 @@ type Message struct {
 }
 
 type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function FunctionCall `json:"function"`
+	ID               string       `json:"id"`
+	Type             string       `json:"type"`
+	Function         FunctionCall `json:"function"`
+	ThoughtSignature string       `json:"thought_signature,omitempty"`
 }
 
 type FunctionCall struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	Name             string `json:"name"`
+	Arguments        string `json:"arguments"`
+	ThoughtSignature string `json:"thought_signature,omitempty"`
 }
 
 type Tool struct {
