@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io/fs"
 	"mime"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -42,33 +44,49 @@ func init() {
 }
 
 func Start(cfg *config.Config) error {
-	app := fiber.New(fiber.Config{AppName: "eTools-Code"})
+	// Configuração resiliente do Fiber HTTP Server
+	app := fiber.New(fiber.Config{
+		AppName:      "eTools-Code",
+		BodyLimit:    10 * 1024 * 1024,  // Limite máximo de 10 MB para uploads e JSONs
+		ReadTimeout:  30 * time.Second,  // Timeout para leitura dos cabeçalhos/body da requisição
+		WriteTimeout: 0,                 // 0 = Sem timeout de escrita (indispensável para SSE / Stream de LLM)
+		IdleTimeout:  120 * time.Second, // Timeout de conexões ociosas
+	})
+
 	app.Use(logger.New())
-	app.Use(cors.New())
+
+	// CORS configurado explicitamente
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, OPTIONS",
+	}))
 
 	h := NewHandler(cfg)
 	ch := NewChatHandler(cfg)
 
-	// Rota estática manual garantindo Content-Type correto e sem problemas de path
+	// Rota estática manual garantindo Content-Type correto e caminho saneado
 	app.Get("/static/*", func(c *fiber.Ctx) error {
-		path := strings.TrimPrefix(c.Params("*"), "/")
-		data, err := fs.ReadFile(staticSub, path)
+		rawPath := strings.TrimPrefix(c.Params("*"), "/")
+		cleanPath := path.Clean(rawPath)
+
+		data, err := fs.ReadFile(staticSub, cleanPath)
 		if err != nil {
-			return c.Status(404).SendString("static not found: " + path)
+			return c.Status(404).SendString("static not found: " + cleanPath)
 		}
 
 		// Força os tipos MIME explicitamente
 		switch {
-		case strings.HasSuffix(path, ".css"):
+		case strings.HasSuffix(cleanPath, ".css"):
 			c.Set("Content-Type", "text/css; charset=utf-8")
-		case strings.HasSuffix(path, ".js"):
+		case strings.HasSuffix(cleanPath, ".js"):
 			c.Set("Content-Type", "application/javascript; charset=utf-8")
-		case strings.HasSuffix(path, ".png"):
+		case strings.HasSuffix(cleanPath, ".png"):
 			c.Set("Content-Type", "image/png")
-		case strings.HasSuffix(path, ".ico"):
+		case strings.HasSuffix(cleanPath, ".ico"):
 			c.Set("Content-Type", "image/x-icon")
 		default:
-			if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
+			if ct := mime.TypeByExtension(filepath.Ext(cleanPath)); ct != "" {
 				c.Set("Content-Type", ct)
 			}
 		}

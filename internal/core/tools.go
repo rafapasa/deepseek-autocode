@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -128,14 +128,7 @@ func (t *ToolExecutor) Execute(call dto.ToolCall) (string, error) {
 }
 
 func (t *ToolExecutor) safePath(rel string) (string, error) {
-	if rel == "" {
-		rel = "."
-	}
-	clean := filepath.Clean(rel)
-	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-		return "", fmt.Errorf("caminho não permitido: %s", rel)
-	}
-	return filepath.Join(t.Raiz, clean), nil
+	return SafeJoin(t.Raiz, rel)
 }
 
 func (t *ToolExecutor) readFile(args string) (string, error) {
@@ -153,8 +146,8 @@ func (t *ToolExecutor) readFile(args string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Trunca em 20KB pra evitar explodir o contexto
-	const maxBytes = 256 * 1024
+	// Trunca em 64KB para evitar estouro de tokens/contexto
+	const maxBytes = 64 * 1024
 	if len(content) > maxBytes {
 		return content[:maxBytes] + fmt.Sprintf("\n\n... [truncado: %d de %d bytes]", maxBytes, len(content)), nil
 	}
@@ -190,12 +183,25 @@ func (t *ToolExecutor) listDir(args string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("ls", "-la", full)
-	out, err := cmd.CombinedOutput()
+
+	entries, err := os.ReadDir(full)
 	if err != nil {
-		return "", fmt.Errorf("erro ls: %v\n%s", err, string(out))
+		return "", fmt.Errorf("erro ao ler diretório: %v", err)
 	}
-	return string(out), nil
+
+	var sb strings.Builder
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		typeChar := "-"
+		if entry.IsDir() {
+			typeChar = "d"
+		}
+		fmt.Fprintf(&sb, "%s %10d %s\n", typeChar, info.Size(), entry.Name())
+	}
+	return sb.String(), nil
 }
 
 func (t *ToolExecutor) runCommand(args string) (string, error) {
@@ -206,8 +212,26 @@ func (t *ToolExecutor) runCommand(args string) (string, error) {
 		return "", err
 	}
 
+	cmdStr := strings.TrimSpace(p.Command)
+	if cmdStr == "" {
+		return "", fmt.Errorf("comando vazio informado")
+	}
+
+	// Bloqueia encadeamento de comandos e operadores perigosos de shell
+	forbiddenChars := []string{";", "&&", "||", "|", "`", "$", ">", "<", "\n"}
+	for _, char := range forbiddenChars {
+		if strings.Contains(cmdStr, char) {
+			return "", fmt.Errorf("caractere de encadeamento não permitido no comando: %q", char)
+		}
+	}
+
+	fields := strings.Fields(cmdStr)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("comando inválido")
+	}
+
 	allowed := []string{"flutter", "dart", "go", "ls", "cat", "find", "grep", "make"}
-	first := strings.Fields(p.Command)[0]
+	first := fields[0]
 	ok := false
 	for _, a := range allowed {
 		if first == a {
@@ -222,11 +246,11 @@ func (t *ToolExecutor) runCommand(args string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", p.Command)
+	cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
 	cmd.Dir = t.Raiz
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("timeout (180s): %s", p.Command)
+		return "", fmt.Errorf("timeout (180s): %s", cmdStr)
 	}
 	if err != nil {
 		return fmt.Sprintf("exit=%v\n%s", err, string(out)), nil

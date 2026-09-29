@@ -28,11 +28,19 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
-// SafeJoin junta raiz + rel, bloqueando path traversal.
+// SafeJoin junta raiz + rel garantindo estritamente que o resultado fique dentro de raiz.
 func SafeJoin(raiz, rel string) (string, error) {
-	clean := filepath.Clean(rel)
-	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-		return "", fmt.Errorf("caminho não permitido: %s", rel)
+	if rel == "" {
+		rel = "."
 	}
-	return filepath.Join(raiz, clean), nil
+	cleanRaiz := filepath.Clean(raiz)
+	targetPath := filepath.Clean(filepath.Join(cleanRaiz, rel))
+
+	// filepath.Rel valida se targetPath não tenta subir além de cleanRaiz
+	relPath, err := filepath.Rel(cleanRaiz, targetPath)
+	if err != nil || strings.HasPrefix(relPath, "..") || relPath == ".." {
+		return "", fmt.Errorf("caminho não permitido (fora da raiz): %s", rel)
+	}
+
+	return targetPath, nil
 }
