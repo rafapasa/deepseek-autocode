@@ -14,12 +14,15 @@
         <div class="brand">
             <img src="/static/logo.png" alt="eToolsCode IA" class="brand-logo">
         </div>
-        <select id="projectSelector" class="select-project"></select>
+        <div class="project-picker">
+            <label for="projectSelector">Projeto</label>
+            <select id="projectSelector" class="select-project"></select>
+        </div>
     </header>
 
     <div class="container">
         <aside class="sidebar">
-            <div class="sidebar-section">
+            <div class="sidebar-section" id="explorerPane">
                 <div class="sidebar-title">
                     EXPLORER
                     <span class="btn-group">
@@ -40,6 +43,15 @@
                     </div>
                 </div>
                 <div id="projectList"></div>
+            </div>
+            <div class="sidebar-section" id="chatsPane" style="display:none">
+                <div class="chats-toolbar">
+                    <div class="sidebar-title">CHATS</div>
+                    <button class="btn-small green btn-new-chat" id="btnNewChat">+ novo</button>
+                </div>
+                <div class="chats-panel">
+                    <div id="chatList" class="chat-list"></div>
+                </div>
             </div>
         </aside>
 
@@ -75,9 +87,9 @@
                     </div>
                 </section>
 
-                <aside class="diff-panel" id="diffPanel">
-                    <div class="diff-head"><span>DIFF</span><span id="diffCount">● 0</span></div>
-                    <div id="diffList" class="scroll"></div>
+                <aside class="files-panel" id="filesPanel">
+                    <div class="files-head">FONTES</div>
+                    <div id="filesList" class="files-body"></div>
                 </aside>
             </div>
         </main>
@@ -85,7 +97,7 @@
 
     <!-- modals -->
     <div class="modal" id="editModal">
-        <div class="modal-content">
+        <div class="modal-content edit-wide">
             <h3 id="editTitle"></h3>
             <div id="editPath" class="muted small"></div><textarea id="editContent"></textarea>
             <div id="editAlert" class="alert"></div>

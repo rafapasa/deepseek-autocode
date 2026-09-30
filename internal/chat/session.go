@@ -20,6 +20,7 @@ const (
 type ChatSession struct {
 	ID             string        `json:"id"`
 	Project        string        `json:"project"`
+	Title          string        `json:"title,omitempty"`
 	BasePath       string        `json:"base_path"`
 	ProjetoPath    string        `json:"projeto_path"`
 	BaseContent    string        `json:"base_content,omitempty"`
@@ -41,6 +42,7 @@ func NewSession(id, project, basePath, projetoPath, baseContent, projetoContent 
 		ProjetoPath:    projetoPath,
 		BaseContent:    baseContent,
 		ProjetoContent: projetoContent,
+		Title:          "Novo chat",
 		Messages:       []dto.Message{},
 		CreatedAt:      now,
 		UpdatedAt:      now,

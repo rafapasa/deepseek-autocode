@@ -20,68 +20,128 @@ export async function loadExplorer(){
   try{
     const data = await apiGet('/api/issues');
     const list = document.getElementById('projectList');
-    if(!list) return;
-    list.innerHTML = '';
+    const projectsAll = data.projects || [];
+    const selected = projectsAll.filter(p => p.name === state.currentProject);
 
-    let projects = data.projects || [];
-    if(state.currentProject){
-      projects = projects.filter(p => p.name === state.currentProject);
+    if(list){
+      renderExplorerTree(list, state.currentProject ? selected : projectsAll, { emptyText: 'Nenhum projeto para exibir' });
     }
+    await loadSourceTree();
+  }catch(e){ console.error('[eTools] Erro loadExplorer:', e); }
+}
 
-    if(!projects.length){
-      list.innerHTML = '<div class="explorer-empty">Nenhum projeto para exibir</div>';
+function renderExplorerTree(list, projects, opts = {}){
+  list.innerHTML = '';
+  if(!projects.length){
+    if(opts.emptyText) list.innerHTML = `<div class="explorer-empty">${opts.emptyText}</div>`;
+    return;
+  }
+
+  projects.forEach(p => {
+    const forceOpen = !!state.currentProject;
+    const isOpen = forceOpen || state.expandedProjects.has(p.name);
+    const count = (p.issues || []).length;
+
+    const div = document.createElement('div');
+    div.className = 'project' + (isOpen ? ' open' : '');
+    div.dataset.projectName = p.name;
+
+    const header = document.createElement('div');
+    header.className = 'project-header';
+    header.dataset.project = p.name;
+    header.innerHTML = `
+      <span class="project-arrow" aria-hidden="true"></span>
+      <span class="folder-icon" aria-hidden="true"></span>
+      <span class="project-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+      <span class="project-count">${count}</span>
+    `;
+
+    const tree = document.createElement('div');
+    tree.className = 'file-tree';
+
+    tree.appendChild(buildFileItem({
+      name: 'projeto.json',
+      title: 'projeto.json — ' + p.name,
+      extraClass: 'projeto-file',
+      check: p.projeto_exists,
+      attrs: { 'data-projeto-file': p.name },
+      menu: { kind: 'projeto', project: p.name }
+    }));
+
+    (p.issues || []).forEach(f => {
+      const isSelected = state.currentIssue &&
+        state.currentIssue.project === p.name &&
+        state.currentIssue.file === f;
+      tree.appendChild(buildFileItem({
+        name: f,
+        title: f,
+        extraClass: isSelected ? 'selected' : '',
+        attrs: { 'data-issue-file': f, 'data-issue-project': p.name },
+        menu: { kind: 'issue', project: p.name, file: f }
+      }));
+    });
+
+    div.appendChild(header);
+    div.appendChild(tree);
+    list.appendChild(div);
+  });
+}
+
+export async function loadSourceTree(){
+  const filesList = document.getElementById('filesList');
+  const head = document.querySelector('.files-head');
+  if(!filesList) return;
+  if(!state.currentProject){
+    filesList.innerHTML = '';
+    if(head) head.textContent = 'FONTES';
+    return;
+  }
+  try{
+    const data = await apiGet('/api/tree/' + encodeURIComponent(state.currentProject));
+    if(head){
+      head.textContent = 'FONTES';
+      head.title = data.root || '';
+    }
+    const tree = data.tree || [];
+    if(!tree.length){
+      filesList.innerHTML = '<div class="explorer-empty">Nenhum arquivo</div>';
       return;
     }
+    const wrap = document.createElement('div');
+    wrap.className = 'src-tree';
+    tree.forEach(node => wrap.appendChild(buildSrcNode(node, 0)));
+    filesList.innerHTML = '';
+    filesList.appendChild(wrap);
+  }catch(e){
+    filesList.innerHTML = `<div class="explorer-empty">${escapeHtml(e.message || 'Falha ao listar fontes')}</div>`;
+  }
+}
 
-    projects.forEach(p => {
-      const forceOpen = !!state.currentProject;
-      const isOpen = forceOpen || state.expandedProjects.has(p.name);
-      const count = (p.issues || []).length;
-
-      const div = document.createElement('div');
-      div.className = 'project' + (isOpen ? ' open' : '');
-      div.dataset.projectName = p.name;
-
-      const header = document.createElement('div');
-      header.className = 'project-header';
-      header.dataset.project = p.name;
-      header.innerHTML = `
-        <span class="project-arrow" aria-hidden="true"></span>
-        <span class="folder-icon" aria-hidden="true"></span>
-        <span class="project-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-        <span class="project-count">${count}</span>
-      `;
-
-      const tree = document.createElement('div');
-      tree.className = 'file-tree';
-
-      tree.appendChild(buildFileItem({
-        name: 'projeto.json',
-        title: 'projeto.json — ' + p.name,
-        extraClass: 'projeto-file',
-        check: p.projeto_exists,
-        attrs: { 'data-projeto-file': p.name },
-        menu: { kind: 'projeto', project: p.name }
-      }));
-
-      (p.issues || []).forEach(f => {
-        const isSelected = state.currentIssue &&
-          state.currentIssue.project === p.name &&
-          state.currentIssue.file === f;
-        tree.appendChild(buildFileItem({
-          name: f,
-          title: f,
-          extraClass: isSelected ? 'selected' : '',
-          attrs: { 'data-issue-file': f, 'data-issue-project': p.name },
-          menu: { kind: 'issue', project: p.name, file: f }
-        }));
-      });
-
-      div.appendChild(header);
-      div.appendChild(tree);
-      list.appendChild(div);
+function buildSrcNode(node, depth){
+  const row = document.createElement('div');
+  row.className = 'src-row' + (node.dir ? ' src-dir' : ' src-file');
+  row.style.paddingLeft = (6 + depth * 12) + 'px';
+  row.title = node.path || node.name;
+  row.dataset.path = node.path || '';
+  const ico = node.dir ? '▸' : '·';
+  row.innerHTML = `<span class="src-ico">${ico}</span><span class="src-name">${escapeHtml(node.name)}</span>`;
+  const frag = document.createDocumentFragment();
+  frag.appendChild(row);
+  if(node.dir && node.children && node.children.length){
+    const kids = document.createElement('div');
+    kids.className = 'src-children';
+    node.children.forEach(ch => kids.appendChild(buildSrcNode(ch, depth + 1)));
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = kids.classList.toggle('open');
+      row.querySelector('.src-ico').textContent = open ? '▾' : '▸';
     });
-  }catch(e){ console.error('[eTools] Erro loadExplorer:', e); }
+    frag.appendChild(kids);
+  }
+  const box = document.createElement('div');
+  box.className = 'src-node';
+  box.appendChild(frag);
+  return box;
 }
 
 function buildFileItem({ name, title, extraClass = '', check = false, attrs = {}, menu }){
@@ -155,6 +215,12 @@ export function openItemMenu(anchor, menuData){
         { act: 'edit', label: 'Editar', icon: 'edit' },
         { act: 'replace', label: 'Substituir arquivo', icon: 'up' }
       ]
+    : menuData.kind === 'chat'
+    ? [
+        { act: 'rename', label: 'Renomear', icon: 'edit' },
+        { act: 'export', label: 'Exportar resumo', icon: 'up' },
+        { act: 'delete', label: 'Excluir', icon: 'play' }
+      ]
     : [
         { act: 'edit', label: 'Editar', icon: 'edit' },
         { act: 'replace', label: 'Upload / substituir', icon: 'up' }
@@ -168,6 +234,7 @@ export function openItemMenu(anchor, menuData){
   menu.dataset.kind = menuData.kind;
   menu.dataset.project = menuData.project || '';
   menu.dataset.file = menuData.file || '';
+  menu.dataset.chatId = menuData.id || '';
 
   const rect = anchor.getBoundingClientRect();
   menu.hidden = false;

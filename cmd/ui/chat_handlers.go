@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rafapasa/deepseek-autocode/internal/chat"
@@ -18,6 +19,9 @@ type ChatHandler struct {
 }
 
 func NewChatHandler(cfg *config.Config) *ChatHandler {
+	if err := chat.MergeHistoryByProject(); err != nil {
+		log.Printf("[chat] merge histórico: %v", err)
+	}
 	return &ChatHandler{cfg: cfg, service: chat.NewService(cfg)}
 }
 
@@ -119,7 +123,7 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 
 			for _, tc := range toolCalls {
 				result := chat.ExecuteTool(projectRoot, tc.Function.Name, tc.Function.Arguments)
-				writeSSEChat(w, fiber.Map{"type": "tool", "name": tc.Function.Name, "result": result})
+				writeSSEChat(w, toolEvent(tc.Function.Name, tc.Function.Arguments, result))
 				content := result.Content
 				if !result.Success {
 					content = "ERRO: " + result.Error
@@ -142,6 +146,68 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	})
 
 	return nil
+}
+
+
+func (h *ChatHandler) RenameChat(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).SendString(err.Error())
+	}
+	if strings.TrimSpace(body.Title) == "" {
+		return c.Status(400).SendString("título vazio")
+	}
+	sess, err := chat.RenameSession(id, body.Title)
+	if err != nil {
+		return c.Status(404).SendString(err.Error())
+	}
+	return c.JSON(fiber.Map{"id": sess.ID, "title": sess.Title})
+}
+
+func (h *ChatHandler) DeleteChat(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if err := chat.DeleteSession(id); err != nil {
+		return c.Status(404).SendString(err.Error())
+	}
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+func (h *ChatHandler) ExportResumo(c *fiber.Ctx) error {
+	s, err := chat.LoadSession(c.Params("id"))
+	if err != nil {
+		return c.Status(404).SendString("chat não encontrado")
+	}
+	body := chat.BuildResumo(s)
+	name := s.Title
+	if name == "" {
+		name = "chat"
+	}
+	c.Set("Content-Type", "text/markdown; charset=utf-8")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFileName(name)+".md"))
+	return c.SendString(body)
+}
+
+func sanitizeFileName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "chat"
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if r == '/' || r == '\\' || r == ':' || r < 32 {
+			b.WriteByte('-')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		return "chat"
+	}
+	return out
 }
 
 func (h *ChatHandler) ExportChat(c *fiber.Ctx) error {
@@ -170,4 +236,36 @@ func writeSSEChat(w *bufio.Writer, payload interface{}) {
 func jsonStringChat(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func toolEvent(name, argsJSON string, result chat.ToolResult) fiber.Map {
+	path := ""
+	var args map[string]interface{}
+	_ = json.Unmarshal([]byte(argsJSON), &args)
+	if args != nil {
+		if v, ok := args["path"].(string); ok {
+			path = v
+		} else if v, ok := args["dir"].(string); ok {
+			path = v
+		}
+	}
+	if path == "" && (name == "list_files" || name == "list_dir") {
+		path = "."
+	}
+	kind := "read"
+	switch name {
+	case "list_files", "list_dir":
+		kind = "list"
+	case "write_file", "apply_patch":
+		kind = "write"
+	}
+	return fiber.Map{
+		"type":    "tool",
+		"name":    name,
+		"kind":    kind,
+		"path":    path,
+		"ok":      result.Success,
+		"error":   result.Error,
+		"bytes":   len(result.Content),
+	}
 }

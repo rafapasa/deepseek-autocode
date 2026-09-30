@@ -142,6 +142,92 @@ func (h *Handler) ListIssues(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"projects": projects, "base_exists": baseExists})
 }
 
+type srcNode struct {
+	Name     string    `json:"name"`
+	Path     string    `json:"path"`
+	Dir      bool      `json:"dir"`
+	Children []srcNode `json:"children,omitempty"`
+}
+
+func (h *Handler) ProjectTree(c *fiber.Ctx) error {
+	project := c.Params("project")
+	if project == "" || strings.Contains(project, "..") {
+		return c.JSON(fiber.Map{"root": "", "tree": []srcNode{}})
+	}
+	projetoPath := filepath.Join(h.cfg.IssuesDir, project, "projeto.json")
+	data, err := os.ReadFile(projetoPath)
+	root := ""
+	if err == nil {
+		var meta struct {
+			Raiz string `json:"raiz"`
+		}
+		if json.Unmarshal(data, &meta) == nil {
+			root = strings.TrimSpace(meta.Raiz)
+		}
+	}
+	if root == "" && h.cfg.IssuesDir != "" {
+		root = filepath.Join(filepath.Dir(h.cfg.IssuesDir), project)
+	}
+	if root == "" {
+		return c.Status(404).SendString("raiz do projeto não encontrada")
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return c.Status(404).SendString("pasta do projeto inexistente: " + root)
+	}
+	tree, _ := walkSrc(root, root, 0, 0)
+	return c.JSON(fiber.Map{"root": root, "project": project, "tree": tree})
+}
+
+func skipSrcName(name string) bool {
+	switch strings.ToLower(name) {
+	case ".git", "node_modules", "vendor", "dist", "coverage", "__pycache__", ".idea", ".cache", "tmp", "temp":
+		return true
+	}
+	return false
+}
+
+func walkSrc(absRoot, dir string, depth, count int) ([]srcNode, int) {
+	if depth > 6 || count > 800 {
+		return nil, count
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, count
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDir() != entries[j].IsDir() {
+			return entries[i].IsDir()
+		}
+		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+	})
+	var out []srcNode
+	for _, e := range entries {
+		if count > 800 {
+			break
+		}
+		name := e.Name()
+		if skipSrcName(name) {
+			continue
+		}
+		if strings.HasPrefix(name, ".") && name != ".gitignore" && name != ".env.example" {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		rel, _ := filepath.Rel(absRoot, full)
+		rel = filepath.ToSlash(rel)
+		node := srcNode{Name: name, Path: rel, Dir: e.IsDir()}
+		count++
+		if e.IsDir() {
+			kids, n := walkSrc(absRoot, full, depth+1, count)
+			count = n
+			node.Children = kids
+		}
+		out = append(out, node)
+	}
+	return out, count
+}
+
 func (h *Handler) ListProjects(c *fiber.Ctx) error {
 	if h.cfg.IssuesDir == "" {
 		return c.JSON([]string{})

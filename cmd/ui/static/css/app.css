@@ -51,13 +51,47 @@ header {
   object-fit: contain;
 }
 
+.project-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 50%;
+  max-width: 50%;
+  justify-content: flex-end;
+}
+
+.project-picker label {
+  color: #1E3A5F;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .select-project {
-  background: #f8fafc;
-  color: #0f172a; /* Texto escuro para leitura no fundo claro */
-  border: 1px solid #cbd5e1;
-  padding: 6px 12px;
+  flex: 1;
+  min-width: 0;
+  background: var(--green);
+  color: #ffffff;
+  border: none;
+  padding: 7px 12px;
   border-radius: 6px;
   outline: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+}
+
+.select-project:hover {
+  background: var(--green-hover);
+}
+
+.select-project option {
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 500;
 }
 
 /* Structural Layout */
@@ -75,6 +109,7 @@ header {
   display: flex;
   flex-direction: column;
   padding: 8px 0 12px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -243,6 +278,7 @@ header {
   border-top: 1px solid #e2e8f0;
   display: flex;
   gap: 8px;
+  align-items: flex-end;
   background: #f8fafc;       /* Rodapé do chat levemente destacado */
 }
 
@@ -256,6 +292,9 @@ header {
   resize: none;
   outline: none;
   font-size: 0.9rem;
+  line-height: 1.4;
+  min-height: 40px;
+  overflow-y: hidden;
 }
 
 .chat-input::placeholder {
@@ -276,13 +315,80 @@ header {
   background: var(--green-hover);
 }
 
-/* Diff Panel Right */
+/* Diff Panel Right — reservado, hoje sem fonte de dados */
 .diff-panel {
+  display: none !important;
+}
+
+.files-panel {
   width: 260px;
+  min-width: 220px;
   border-left: 1px solid var(--border-color);
-  background: var(--bg-card);
-  display: flex;
+  background: #0d1728;
+  display: none;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.files-panel.visible {
+  display: flex;
+}
+
+.files-head {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: #8b9bb4;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.files-body {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px 4px 12px;
+}
+
+.src-tree {
+  font-size: 12px;
+  color: #7d8da6;
+  overflow-x: hidden;
+}
+.src-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  border-radius: 4px;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.src-row.src-dir {
+  cursor: pointer;
+  color: #9fb0c7;
+}
+.src-row:hover {
+  background: rgba(255,255,255,0.06);
+  color: #e2e8f0;
+}
+.src-ico {
+  width: 10px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #64748b;
+}
+.src-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.src-children {
+  display: none;
+}
+.src-children.open {
+  display: block;
 }
 
 .diff-head {
@@ -384,6 +490,12 @@ header {
   gap: 12px;
 }
 
+.modal-content.edit-wide {
+  width: min(1100px, 96vw);
+  height: min(92vh, 920px);
+  max-width: 96vw;
+}
+
 .modal-content.sm {
   width: 380px;
 }
@@ -402,6 +514,16 @@ header {
 .modal-content textarea {
   min-height: 120px;
   resize: vertical;
+}
+
+.modal-content.edit-wide textarea {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: none;
 }
 
 .modal-actions {
@@ -462,14 +584,120 @@ header {
 
 .message.system {
   align-self: center;
-  background: #FFFBEB;
-  color: #92400E;
+  background: #F8FAFC;
+  color: #64748B;
   font-size: 0.8rem;
-  border: 1px dashed #F59E0B;
+  border: 1px solid #E2E8F0;
   border-radius: 8px;
   max-width: 90%;
   text-align: center;
   padding: 8px 12px;
+}
+
+.tool-line {
+  align-self: flex-start;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 92%;
+  margin: 0 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.tool-line .tool-verb {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.tool-line .tool-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+.tool-line .tool-err-msg {
+  color: #9B1C1C;
+  opacity: 0.85;
+}
+.tool-line.tool-read {
+  color: #1E3A5F;
+  background: #F1F5F9;
+  border-color: #D6DEE8;
+}
+.tool-line.tool-list {
+  color: #334155;
+  background: #F8FAFC;
+  border-color: #E2E8F0;
+}
+.tool-line.tool-write {
+  color: #166534;
+  background: #F0FDF4;
+  border-color: #BBF7D0;
+}
+.tool-line.tool-err {
+  color: #9B1C1C;
+  background: #FEF2F2;
+  border-color: #FECACA;
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-width: 100%;
+}
+.chat-list .file-item {
+  margin: 0;
+  max-width: 100%;
+  color: #64748b;
+}
+.chat-list .file-item:hover,
+.chat-list .file-item.selected {
+  color: #e2e8f0;
+}
+.chat-list .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+#chatsPane {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 10px;
+}
+
+.chats-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.btn-new-chat {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+  text-align: center;
+  padding: 7px 8px;
+  font-size: 0.8rem;
+}
+
+.chats-panel {
+  flex: 1;
+  min-height: 0;
+  background: #16233a;
+  border: 1px solid #2a3c58;
+  border-radius: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Code blocks dentro das mensagens */

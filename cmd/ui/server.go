@@ -59,7 +59,7 @@ func Start(cfg *config.Config) error {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, OPTIONS",
+		AllowMethods: "GET, POST, PATCH, DELETE, OPTIONS",
 	}))
 
 	h := NewHandler(cfg)
@@ -117,6 +117,7 @@ func Start(cfg *config.Config) error {
 	api.Get("/env", h.CheckEnv)
 	api.Get("/issues", h.ListIssues)
 	api.Get("/projects", h.ListProjects)
+	api.Get("/tree/:project", h.ProjectTree)
 	api.Get("/base", h.GetBase)
 	api.Post("/base", h.SaveBase)
 	api.Post("/base/upload", h.UploadBase)
@@ -135,7 +136,10 @@ func Start(cfg *config.Config) error {
 	chatApi := api.Group("/chat")
 	chatApi.Post("/new", ch.CreateChat)
 	chatApi.Get("/", ch.ListChats)
+	chatApi.Get("/:id/resumo", ch.ExportResumo)
 	chatApi.Get("/:id", ch.GetChat)
+	chatApi.Patch("/:id", ch.RenameChat)
+	chatApi.Delete("/:id", ch.DeleteChat)
 	chatApi.Post("/:id/message", ch.PostMessage)
 	chatApi.Post("/:id/export", ch.ExportChat)
 

@@ -159,3 +159,14 @@ unlock-fs:
 	@sudo systemctl show $(SERVICE) -p ReadWritePaths,ProtectHome
 	@echo "✅ Serviço reiniciado com escrita em /home/opc/prj"
 
+# ------------------------------------------------------------
+# Commit e push para origin/main
+# ------------------------------------------------------------
+.PHONY: git-push-main
+git-push-main:
+	@git add -A
+	@git status
+	@git -c user.name="Rafael Alberto Pasa" -c user.email="rafapasa@gmail.com" commit -m "feat(ui): chat multiplo, explorer de fontes, logs e layout dsac" || true
+	@git push origin main
+	@git log -1 --oneline
+	@git status -sb

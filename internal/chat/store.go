@@ -113,6 +113,20 @@ func ListSessions() ([]ChatSession, error) {
 			continue
 		}
 
+		if strings.TrimSpace(s.Title) == "" {
+			title := ""
+			for _, m := range s.Messages {
+				if m.Role == "user" && m.Content != "" {
+					title = m.Content
+					break
+				}
+			}
+			if len([]rune(title)) > 48 {
+				r := []rune(title)
+				title = string(r[:48]) + "…"
+			}
+			s.Title = title
+		}
 		s.BaseContent = ""
 		s.ProjetoContent = ""
 		s.Messages = nil
@@ -146,4 +160,111 @@ func DeleteSession(id string) error {
 	}
 
 	return nil
+}
+
+func RenameSession(id, title string) (*ChatSession, error) {
+	s, err := LoadSession(id)
+	if err != nil {
+		return nil, err
+	}
+	s.Title = strings.TrimSpace(title)
+	if err := SaveSession(s); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func BuildResumo(s *ChatSession) string {
+	if s == nil {
+		return ""
+	}
+	var b strings.Builder
+	title := s.Title
+	if title == "" {
+		title = "Chat"
+	}
+	b.WriteString("# "+title+"\n")
+	if s.Project != "" {
+		b.WriteString("Projeto: "+s.Project+"\n")
+	}
+	b.WriteString("Atualizado: "+s.UpdatedAt.Format("02/01/2006 15:04")+"\n\n")
+	for _, m := range s.Messages {
+		switch m.Role {
+		case "user":
+			b.WriteString("## Você\n\n"+m.Content+"\n\n")
+		case "assistant":
+			if strings.TrimSpace(m.Content) == "" {
+				continue
+			}
+			b.WriteString("## Assistente\n\n"+m.Content+"\n\n")
+		}
+	}
+	return b.String()
+}
+
+func MergeHistoryByProject() error {
+	dir := getChatsDir()
+	flag := filepath.Join(dir, ".merged-history")
+	if _, err := os.Stat(flag); err == nil {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	groups := map[string][]ChatSession{}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var s ChatSession
+		if json.Unmarshal(data, &s) != nil || s.ID == "" {
+			continue
+		}
+		key := s.Project
+		if key == "" {
+			key = "_none"
+		}
+		groups[key] = append(groups[key], s)
+	}
+	for _, list := range groups {
+		if len(list) < 2 {
+			continue
+		}
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].CreatedAt.Equal(list[j].CreatedAt) {
+				return list[i].ID < list[j].ID
+			}
+			return list[i].CreatedAt.Before(list[j].CreatedAt)
+		})
+		keep := list[0]
+		if strings.TrimSpace(keep.Title) == "" {
+			keep.Title = "Histórico"
+		} else {
+			keep.Title = "Histórico"
+		}
+		for _, extra := range list[1:] {
+			for _, m := range extra.Messages {
+				if m.Role == "system" {
+					continue
+				}
+				keep.Messages = append(keep.Messages, m)
+			}
+			if extra.UpdatedAt.After(keep.UpdatedAt) {
+				keep.UpdatedAt = extra.UpdatedAt
+			}
+			_ = os.Remove(filepath.Join(dir, extra.ID+".json"))
+		}
+		if err := SaveSession(&keep); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(flag, []byte("ok\n"), 0644)
 }
