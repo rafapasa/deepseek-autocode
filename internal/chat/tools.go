@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/rafapasa/deepseek-autocode/internal/core"
 	"github.com/rafapasa/deepseek-autocode/internal/dto"
 )
 
@@ -40,6 +41,7 @@ func GetTools() []dto.Tool {
 				Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "diff": map[string]interface{}{"type": "string"}}, "required": []string{"path", "diff"}},
 			},
 		},
+		core.RunCommandTool(),
 	}
 }
 
@@ -70,15 +72,10 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 		}
 	}
 
+	// Confina à raiz permitida (DSAC_SHELL_ROOT, padrão ~/prj), resolvendo symlinks
+	// e bloqueando arquivos sensíveis (.env, .ssh, ...).
 	safeJoin := func(p string) (string, error) {
-		clean := filepath.Clean(p)
-		if strings.Contains(clean, "..") {
-			return "", fmt.Errorf("path fora do projeto")
-		}
-		if filepath.IsAbs(clean) {
-			return clean, nil
-		}
-		return filepath.Join(projectRoot, clean), nil
+		return core.ResolveSafePath(projectRoot, p)
 	}
 
 	switch toolName {
@@ -139,6 +136,12 @@ func ExecuteTool(projectRoot, toolName, argsJSON string) ToolResult {
 			return ToolResult{Success: false, Error: err.Error()}
 		}
 		return ToolResult{Success: true, Content: fmt.Sprintf("Patch aplicado: %s (%d bytes)", args["path"], len(args["diff"]))}
+	case "run_command":
+		out, err := core.RunShellCommand(projectRoot, args["cwd"], args["command"])
+		if err != nil {
+			return ToolResult{Success: false, Error: err.Error()}
+		}
+		return ToolResult{Success: !strings.HasPrefix(out, "exit=") || strings.HasPrefix(out, "exit=0\n"), Content: out}
 	default:
 		return ToolResult{Success: false, Error: "tool desconhecida: " + toolName}
 	}

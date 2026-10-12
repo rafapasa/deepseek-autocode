@@ -44,13 +44,19 @@ func init() {
 }
 
 func Start(cfg *config.Config) error {
+	// Autenticação: falha ao iniciar se nenhuma senha estiver configurada
+	auth, err := NewAuthFromEnv()
+	if err != nil {
+		return err
+	}
+
 	// Configuração resiliente do Fiber HTTP Server
 	app := fiber.New(fiber.Config{
 		AppName:      "eTools-Code",
-		BodyLimit:    10 * 1024 * 1024,  // Limite máximo de 10 MB para uploads e JSONs
-		ReadTimeout:  30 * time.Second,   // Timeout para leitura dos cabeçalhos/body da requisição
-		WriteTimeout: 0,                  // 0 = Sem timeout de escrita (indispensável para SSE / Stream de LLM)
-		IdleTimeout:  24 * time.Hour,     // SSE de issues longas não pode cair por ociosidade
+		BodyLimit:    10 * 1024 * 1024, // Limite máximo de 10 MB para uploads e JSONs
+		ReadTimeout:  30 * time.Second, // Timeout para leitura dos cabeçalhos/body da requisição
+		WriteTimeout: 0,                // 0 = Sem timeout de escrita (indispensável para SSE / Stream de LLM)
+		IdleTimeout:  24 * time.Hour,   // SSE de issues longas não pode cair por ociosidade
 	})
 
 	app.Use(logger.New())
@@ -61,6 +67,10 @@ func Start(cfg *config.Config) error {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET, POST, PATCH, DELETE, OPTIONS",
 	}))
+
+	// Login/logout + proteção de TODAS as rotas registradas abaixo
+	auth.Register(app)
+	app.Use(auth.Middleware())
 
 	h := NewHandler(cfg)
 	ch := NewChatHandler(cfg)

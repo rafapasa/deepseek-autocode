@@ -183,20 +183,20 @@ func BuildResumo(s *ChatSession) string {
 	if title == "" {
 		title = "Chat"
 	}
-	b.WriteString("# "+title+"\n")
+	b.WriteString("# " + title + "\n")
 	if s.Project != "" {
-		b.WriteString("Projeto: "+s.Project+"\n")
+		b.WriteString("Projeto: " + s.Project + "\n")
 	}
-	b.WriteString("Atualizado: "+s.UpdatedAt.Format("02/01/2006 15:04")+"\n\n")
+	b.WriteString("Atualizado: " + s.UpdatedAt.Format("02/01/2006 15:04") + "\n\n")
 	for _, m := range s.Messages {
 		switch m.Role {
 		case "user":
-			b.WriteString("## Você\n\n"+m.Content+"\n\n")
+			b.WriteString("## Você\n\n" + m.Content + "\n\n")
 		case "assistant":
 			if strings.TrimSpace(m.Content) == "" {
 				continue
 			}
-			b.WriteString("## Assistente\n\n"+m.Content+"\n\n")
+			b.WriteString("## Assistente\n\n" + m.Content + "\n\n")
 		}
 	}
 	return b.String()

@@ -148,7 +148,6 @@ func (h *ChatHandler) PostMessage(c *fiber.Ctx) error {
 	return nil
 }
 
-
 func (h *ChatHandler) RenameChat(c *fiber.Ctx) error {
 	id := c.Params("id")
 	var body struct {
@@ -260,12 +259,12 @@ func toolEvent(name, argsJSON string, result chat.ToolResult) fiber.Map {
 		kind = "write"
 	}
 	return fiber.Map{
-		"type":    "tool",
-		"name":    name,
-		"kind":    kind,
-		"path":    path,
-		"ok":      result.Success,
-		"error":   result.Error,
-		"bytes":   len(result.Content),
+		"type":  "tool",
+		"name":  name,
+		"kind":  kind,
+		"path":  path,
+		"ok":    result.Success,
+		"error": result.Error,
+		"bytes": len(result.Content),
 	}
 }
